@@ -5,7 +5,9 @@ description = "A lightweight TOML-based memory system for AI agents"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{name = "Svilupp", email = ""}]
+authors = [
+    {name = "Jan Siml", email = "49557684+svilupp@users.noreply.github.com"},
+]
 keywords = ["memory", "ai", "agents", "toml", "preferences"]
 classifiers = [
     "Development Status :: 4 - Beta",
