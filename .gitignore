@@ -205,3 +205,22 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local memory storage
+memories/
+test_memories/
+simple_demo_memories/
+*_preferences.toml
+*_conversations.toml
+test_queue_store/
+
+# uv
+uv.lock
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
