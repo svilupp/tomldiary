@@ -7,7 +7,7 @@ Celebrity chefs discuss their culinary preferences with an AI host.
 import asyncio
 from pathlib import Path
 from pydantic_ai import Agent, RunContext
-from tomldiary import TOMLDiary, MemoryWriter, shutdown_all_background_tasks
+from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 from culinary_prefs import CulinaryPrefTable
 import tomllib
@@ -16,7 +16,7 @@ from typing import Dict, Any
 
 # Define the deps type for our cooking show context
 class CookingShowContext:
-    def __init__(self, chef_name: str, episode: str, diary: TOMLDiary, writer: MemoryWriter):
+    def __init__(self, chef_name: str, episode: str, diary: Diary, writer: MemoryWriter):
         self.chef_name = chef_name
         self.episode = episode
         self.diary = diary
@@ -73,7 +73,7 @@ async def record_preference(ctx: RunContext[CookingShowContext], category: str, 
     return f"Recorded {category}: {item}"
 
 
-async def chef_interview(chef_name: str, chef_personality: str, episodes: list[tuple[str, str]], diary: TOMLDiary, writer: MemoryWriter):
+async def chef_interview(chef_name: str, chef_personality: str, episodes: list[tuple[str, str]], diary: Diary, writer: MemoryWriter):
     """Conduct an interview with a celebrity chef"""
     
     for episode, topic in episodes:
@@ -132,7 +132,7 @@ async def cooking_show_demo():
     backend = LocalBackend(Path("memory_cooking_show"))
     
     # Create diary with the original CulinaryAgent for memory extraction
-    from tomldiary import TOMLDiary
+    from tomldiary import Diary
     
     class CulinaryAgent:
         """Agent that extracts cooking preferences from conversations."""
@@ -274,7 +274,7 @@ async def cooking_show_demo():
     
     agent = CulinaryAgent()
     
-    diary = TOMLDiary(
+    diary = Diary(
         backend=backend,
         pref_table_cls=CulinaryPrefTable,
         agent=(agent, ["favorite_foods", "cooking_techniques", "flavor_preferences", "dislikes", "dietary_restrictions", "cooking_habits", "ingredient_preferences"]),

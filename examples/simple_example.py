@@ -2,7 +2,7 @@
 """
 Minimal Memory System Example
 
-This demonstrates the simplest possible use of TOMLDiary for educational purposes.
+This demonstrates the simplest possible use of Diary for educational purposes.
 No external dependencies, no complex AI - just the core memory functionality.
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tomldiary import MemoryWriter, TOMLDiary, shutdown_all_background_tasks
+from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 from tomldiary.models import PreferenceItem
 
@@ -96,7 +96,7 @@ class SimpleAgent:
 
 async def simple_demo():
     """Educational demo showing the core memory system functionality."""
-    print("📚 TOMLDiary Educational Example")
+    print("📚 Diary Educational Example")
     print("=" * 40)
     print("This shows the simplest possible memory system usage.\n")
 
@@ -107,7 +107,7 @@ async def simple_demo():
 
     # 2. Create diary with simple schema
     print("2️⃣ Creating memory diary...")
-    diary = TOMLDiary(
+    diary = Diary(
         backend=backend,
         pref_table_cls=SimplePrefTable,
         agent=(agent, ["like", "dislike", "about"]),

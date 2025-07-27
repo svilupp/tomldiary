@@ -24,10 +24,11 @@ uv add tomldiary pydantic-ai
 ```python
 from pydantic import BaseModel
 from typing import Dict
-from tomldiary import TOMLDiary, PreferenceItem
+from tomldiary import Diary, PreferenceItem
 from tomldiary.backends import LocalBackend
 
 # Be as specific as possible in your preference schema, it passed to the system prompt of the agent extracting the data!
+# This of the fields as the "slots" to organize facts into and tell the agent what to remember.
 class MyPrefTable(BaseModel):
     """
     likes    : What the user enjoys
@@ -44,7 +45,7 @@ class MyPrefTable(BaseModel):
     biography: Dict[str, PreferenceItem] = {}
 
 
-diary = TOMLDiary(
+diary = Diary(
     backend=LocalBackend(path="./memories"),
     pref_table_cls=MyPrefTable,
     max_prefs_per_category=100,
@@ -143,7 +144,7 @@ writer = MemoryWriter(
 
 ## API Reference
 
-### TOMLDiary
+### Diary
 
 Main class for memory operations:
 
@@ -177,7 +178,7 @@ See the `examples/` directory for:
 
 ```bash
 # Install dev dependencies
-pip install -e ".[dev]"
+uv sync --group dev
 
 # Run tests
 pytest
