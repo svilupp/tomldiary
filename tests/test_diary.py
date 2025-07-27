@@ -7,9 +7,8 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
+from tomldiary import Diary
 from tomldiary.backends.local import LocalBackend
-from tomldiary.diary import TOMLDiary
 from tomldiary.models import MemoryDeps
 
 from .test_user_pref_table import MyPrefTable
@@ -36,8 +35,8 @@ class MockAgent:
             }
 
 
-class TestTOMLDiary:
-    """Test TOMLDiary functionality."""
+class TestDiary:
+    """Test Diary functionality."""
 
     @pytest.fixture
     def temp_dir(self):
@@ -59,8 +58,8 @@ class TestTOMLDiary:
 
     @pytest.fixture
     def diary(self, backend, mock_agent):
-        """Create TOMLDiary with mock agent."""
-        return TOMLDiary(
+        """Create Diary with mock agent."""
+        return Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
             agent=(mock_agent, ["like", "dislike", "allergy", "habit", "about"]),
@@ -158,7 +157,7 @@ class TestTOMLDiary:
     async def test_preference_limits(self, diary, backend):
         """Test preference limit enforcement."""
         # Create diary with very low preference limit
-        diary_low_limit = TOMLDiary(
+        diary_low_limit = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
             agent=(MockAgent(), ["like", "dislike", "allergy", "habit", "about"]),

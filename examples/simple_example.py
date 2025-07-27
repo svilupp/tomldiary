@@ -10,8 +10,7 @@ import asyncio
 from pathlib import Path
 
 from pydantic import BaseModel, Field
-
-from tomldiary import MemoryWriter, TOMLDiary, shutdown_all_background_tasks
+from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 from tomldiary.models import PreferenceItem
 
@@ -107,7 +106,7 @@ async def simple_demo():
 
     # 2. Create diary with simple schema
     print("2️⃣ Creating memory diary...")
-    diary = TOMLDiary(
+    diary = Diary(
         backend=backend,
         pref_table_cls=SimplePrefTable,
         agent=(agent, ["like", "dislike", "about"]),

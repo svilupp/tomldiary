@@ -7,8 +7,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
-from tomldiary import MemoryWriter, TOMLDiary, shutdown_all_background_tasks
+from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 
 from .test_user_pref_table import MyPrefTable
@@ -76,7 +75,7 @@ class TestIntegration:
         """Create complete diary system."""
         backend = LocalBackend(temp_dir)
         agent = MockExtractionAgent()
-        diary = TOMLDiary(
+        diary = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
             agent=(agent, ["like", "dislike", "allergy", "habit", "about"]),
@@ -192,7 +191,7 @@ class TestIntegration:
         agent = MockExtractionAgent()
 
         # Create diary with very low limits
-        diary = TOMLDiary(
+        diary = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
             agent=(agent, ["like", "dislike", "allergy", "habit", "about"]),
@@ -230,7 +229,7 @@ class TestIntegration:
         await writer1.close()
 
         # Create new diary instance with same backend
-        diary2 = TOMLDiary(
+        diary2 = Diary(
             backend=diary1.backend,  # Same backend
             pref_table_cls=MyPrefTable,
             agent=(MockExtractionAgent(), ["like", "dislike", "allergy", "habit", "about"]),
@@ -331,7 +330,7 @@ class TestIntegration:
                 if self.call_count % 3 == 0:  # Fail every 3rd call
                     raise RuntimeError("Simulated agent failure")
 
-        diary = TOMLDiary(
+        diary = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
             agent=(FlakyAgent(), ["like", "dislike", "allergy", "habit", "about"]),

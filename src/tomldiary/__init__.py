@@ -7,7 +7,11 @@ from .extractor_factory import build_extractor
 from .models import ConversationItem, MemoryDeps, MetaInfo, PreferenceItem
 from .writer import MemoryWriter, shutdown_all_background_tasks
 
+# Easier to type alias
+Diary = TOMLDiary
+
 __all__ = [
+    "Diary",
     "TOMLDiary",
     "PreferenceItem",
     "ConversationItem",

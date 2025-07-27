@@ -47,7 +47,7 @@ class S3Backend:
         self.bucket = bucket
         self.prefix = prefix
         self.session = aioboto3.Session()
-    
+
     async def load(self, user_id: str, kind: str) -> Optional[str]:
         async with self.session.client('s3') as s3:
             key = f"{self.prefix}/{user_id}_{kind}.toml"
@@ -57,7 +57,7 @@ class S3Backend:
                 return content.decode('utf-8')
             except s3.exceptions.NoSuchKey:
                 return None
-    
+
     async def save(self, user_id: str, kind: str, content: str):
         async with self.session.client('s3') as s3:
             key = f"{self.prefix}/{user_id}_{kind}.toml"
@@ -79,18 +79,18 @@ class RedisBackend:
     def __init__(self, redis_url: str = "redis://localhost"):
         self.redis_url = redis_url
         self.redis = None
-    
+
     async def _get_redis(self):
         if not self.redis:
             self.redis = await aioredis.from_url(self.redis_url)
         return self.redis
-    
+
     async def load(self, user_id: str, kind: str) -> Optional[str]:
         redis = await self._get_redis()
         key = f"memory:{user_id}:{kind}"
         value = await redis.get(key)
         return value.decode('utf-8') if value else None
-    
+
     async def save(self, user_id: str, kind: str, content: str):
         redis = await self._get_redis()
         key = f"memory:{user_id}:{kind}"
@@ -116,7 +116,7 @@ Be conservative about what you store.
 """)
 
 # Use your custom agent
-diary = TOMLDiary(
+diary = Diary(
     backend=backend,
     pref_table_cls=MyPrefTable,
     agent=(agent, allowed_categories)
@@ -149,7 +149,7 @@ async def batch_process(writer, conversations):
     for user_id, session_id, user_msg, bot_msg in conversations:
         task = writer.submit(user_id, session_id, user_msg, bot_msg)
         tasks.append(task)
-    
+
     # Submit all at once
     await asyncio.gather(*tasks)
 ```
@@ -161,7 +161,7 @@ async def batch_process(writer, conversations):
 The diary automatically enforces limits:
 
 ```python
-diary = TOMLDiary(
+diary = Diary(
     backend=backend,
     pref_table_cls=MyPrefTable,
     max_prefs_per_category=50,  # Keep only top 50 per category
@@ -177,20 +177,20 @@ Implement custom cleanup logic:
 async def cleanup_old_memories(diary, user_id, days=30):
     # Load conversations
     convs_data = await diary._load_convs(user_id)
-    
+
     # Filter old conversations
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     filtered = {}
-    
+
     for session_id, conv in convs_data.items():
         if session_id == "_meta":
             filtered[session_id] = conv
             continue
-            
+
         created = datetime.fromisoformat(conv.get("_created", ""))
         if created > cutoff:
             filtered[session_id] = conv
-    
+
     # Save filtered data
     await diary._save_convs(user_id, filtered)
 ```
@@ -207,10 +207,10 @@ class RobustMemoryWriter(MemoryWriter):
         except Exception as e:
             # Log error
             print(f"Failed to process memory: {e}")
-            
+
             # Send to dead letter queue
             await self.dead_letter_queue.put(item)
-            
+
             # Alert monitoring
             await self.alert_monitor(item, e)
 ```
