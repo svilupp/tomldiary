@@ -28,6 +28,7 @@ from tomldiary import Diary, PreferenceItem
 from tomldiary.backends import LocalBackend
 
 # Be as specific as possible in your preference schema, it passed to the system prompt of the agent extracting the data!
+# This of the fields as the "slots" to organize facts into and tell the agent what to remember.
 class MyPrefTable(BaseModel):
     """
     likes    : What the user enjoys
@@ -177,7 +178,7 @@ See the `examples/` directory for:
 
 ```bash
 # Install dev dependencies
-pip install -e ".[dev]"
+uv sync --group dev
 
 # Run tests
 pytest

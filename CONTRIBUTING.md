@@ -10,32 +10,26 @@ git clone https://github.com/yourusername/tomldiary.git
 cd tomldiary
 ```
 
-2. Create a virtual environment:
+2. Install dependencies with uv:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+uv sync --group dev
 ```
 
-3. Install in development mode:
+3. Install pre-commit hooks:
 ```bash
-pip install -e ".[dev]"
-```
-
-4. Install pre-commit hooks:
-```bash
-pre-commit install
+uv run pre-commit install
 ```
 
 ## Running Tests
 
 Run the test suite:
 ```bash
-pytest
+uv run pytest
 ```
 
 Run with coverage:
 ```bash
-pytest --cov=tomldiary --cov-report=html
+uv run pytest --cov=tomldiary --cov-report=html
 ```
 
 ## Code Style
@@ -44,13 +38,13 @@ We use `ruff` for linting and formatting. The pre-commit hooks will automaticall
 
 ```bash
 # Format code
-ruff format .
+uv run ruff format .
 
 # Check linting
-ruff check .
+uv run ruff check .
 
 # Fix auto-fixable issues
-ruff check --fix .
+uv run ruff check --fix .
 ```
 
 ## Making Changes

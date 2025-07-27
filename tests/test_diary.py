@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tomldiary.backends.local import LocalBackend
 from tomldiary import Diary
+from tomldiary.backends.local import LocalBackend
 from tomldiary.models import MemoryDeps
 
 from .test_user_pref_table import MyPrefTable
@@ -36,7 +36,7 @@ class MockAgent:
             }
 
 
-class TestTOMLDiary:
+class TestDiary:
     """Test Diary functionality."""
 
     @pytest.fixture

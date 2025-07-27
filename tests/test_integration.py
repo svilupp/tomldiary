@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tomldiary import MemoryWriter, Diary, shutdown_all_background_tasks
+from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 
 from .test_user_pref_table import MyPrefTable
