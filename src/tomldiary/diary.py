@@ -8,7 +8,7 @@ from .models import _MODEL_VERSION, ConversationItem, MemoryDeps
 from .utils import extract_categories_from_schema
 
 
-class TOMLDiary:
+class Diary:
     def __init__(
         self, backend, pref_table_cls, agent=None, max_prefs_per_category=100, max_conversations=100
     ):
@@ -161,3 +161,7 @@ class TOMLDiary:
         return dict(
             sorted(conv_entries.items(), key=lambda kv: kv[1]["_created"], reverse=True)[:n]
         )
+
+
+# Backwards compatibility alias
+TOMLDiary = Diary

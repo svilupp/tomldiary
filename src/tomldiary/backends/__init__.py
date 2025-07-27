@@ -1,5 +1,5 @@
 """
-Backend implementations for TOMLDiary storage.
+Backend implementations for Diary storage.
 """
 
 from .local import LocalBackend

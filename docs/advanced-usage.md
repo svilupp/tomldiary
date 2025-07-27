@@ -116,7 +116,7 @@ Be conservative about what you store.
 """)
 
 # Use your custom agent
-diary = TOMLDiary(
+diary = Diary(
     backend=backend,
     pref_table_cls=MyPrefTable,
     agent=(agent, allowed_categories)
@@ -161,7 +161,7 @@ async def batch_process(writer, conversations):
 The diary automatically enforces limits:
 
 ```python
-diary = TOMLDiary(
+diary = Diary(
     backend=backend,
     pref_table_cls=MyPrefTable,
     max_prefs_per_category=50,  # Keep only top 50 per category

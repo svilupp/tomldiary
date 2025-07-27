@@ -14,7 +14,7 @@ uv sync
 
 tomldiary provides three main components:
 
-1. **TOMLDiary**: The core class that manages memory storage and retrieval, it can have many "backends" to preserve the information
+1. **Diary**: The core class that manages memory storage and retrieval, it can have many "backends" to preserve the information
 2. **MemoryWriter**: A background queue system for non-blocking memory updates
 3. **Preference Tables**: Pydantic models that define memory categories (eg, "about", "likes", "dislike")
 
@@ -28,7 +28,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict
 from tomldiary import (
-    TOMLDiary, 
+    Diary,
     MemoryWriter, 
     PreferenceItem,
     shutdown_all_background_tasks
@@ -46,7 +46,7 @@ class SimplePrefTable(BaseModel):
 
 async def main():
     # Step 2: Create the diary
-    diary = TOMLDiary(
+    diary = Diary(
         backend=LocalBackend(Path("./my_memories")),
         pref_table_cls=SimplePrefTable
     )

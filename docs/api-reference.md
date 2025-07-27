@@ -2,12 +2,12 @@
 
 ## Core Classes
 
-### TOMLDiary
+### Diary
 
 The main class for managing user memories.
 
 ```python
-class TOMLDiary:
+class Diary:
     def __init__(
         self,
         backend: Backend,
@@ -48,7 +48,7 @@ Background queue system for non-blocking memory updates.
 class MemoryWriter:
     def __init__(
         self,
-        diary: TOMLDiary,
+        diary: Diary,
         workers: int = 3,
         qsize: int = 100,
         retry_limit: int = 3,
@@ -58,7 +58,7 @@ class MemoryWriter:
 
 #### Parameters
 
-- `diary`: TOMLDiary instance to write to
+- `diary`: Diary instance to write to
 - `workers`: Number of background worker tasks
 - `qsize`: Maximum queue size
 - `retry_limit`: Maximum retries on failure
