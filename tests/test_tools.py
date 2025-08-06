@@ -153,6 +153,7 @@ class TestSimilarityDetection:
         # With low threshold, might find something
         similar_low = _find_similar_preferences(ctx, "likes", "red shirts", min_similarity=10)
         # This depends on actual similarity, but should not crash
+        assert isinstance(similar_low, list)  # Verify it returns a list without crashing
 
 
 class TestLimitChecking:

@@ -28,7 +28,7 @@ def build_extractor(
     if prompt_template_path is None:
         prompt_template_path = Path(__file__).parent / "prompts" / "extractor_prompt.txt"
 
-    prompt_template = Prompt.from_path(prompt_template_path, meta='allow').prompt
+    prompt_template = Prompt.from_path(prompt_template_path, meta="allow").prompt
     system_prompt = prompt_template.format(
         categories_doc=docs,
     )

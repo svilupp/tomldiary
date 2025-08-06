@@ -149,7 +149,7 @@ class TestDiary:
         assert "<unsafe_inputs>" in message
         assert f"<user_message>{user_msg}</user_message>" in message
         assert f"<assistant_message>{assistant_msg}</assistant_message>" in message
-        assert "<current_diary>" in message
+        assert "<current_memory>" in message
         assert isinstance(deps, MemoryDeps)
 
         # Check session was updated
