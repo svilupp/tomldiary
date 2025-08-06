@@ -8,6 +8,8 @@ TOMLDiary is a dead-simple, customizable memory system for agentic applications.
 
 - **Human-readable TOML storage** – easy to inspect, debug and manage.
 - **Fully customizable** – define your own memory schema with simple Pydantic models.
+- **Smart deduplication** – prevents duplicate preferences with intelligent similarity detection.
+- **Configurable limits** – enforces memory limits with graceful degradation.
 - **Minimal overhead** – lightweight design, backend agnostic and easy to integrate.
 - **Atomic, safe writes** – ensures data integrity with proper file locking.
 

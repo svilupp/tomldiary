@@ -20,7 +20,8 @@ classifiers = [
 dependencies = [
     "pydantic>=2",
     "pydantic-ai",
-    "tomli-w"
+    "thefuzz>=0.22.1",
+    "tomli-w",
 ]
 requires-python = ">=3.11"
 
