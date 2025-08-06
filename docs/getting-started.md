@@ -58,8 +58,8 @@ async def main():
     await writer.submit(
         user_id="user123",
         session_id="session1",
-        user_message="I love chocolate ice cream!",
-        assistant_response="I'll remember you love chocolate ice cream."
+        user_msg="I love chocolate ice cream!",
+        assistant_msg="I'll remember you love chocolate ice cream."
     )
     
     # Wait a bit for processing
@@ -89,7 +89,7 @@ The preferences file might look like:
 
 ```toml
 [_meta]
-version = "0.2"
+version = "0.3"
 schema_name = "SimplePrefTable"
 
 [preferences.like.chocolate_ice_cream]

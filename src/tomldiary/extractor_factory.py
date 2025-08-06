@@ -6,6 +6,7 @@ from pathlib import Path
 
 import tomli_w
 from pydantic_ai import Agent, ModelRetry, RunContext, Tool
+from textprompts import Prompt
 
 from . import tools
 from .models import MemoryDeps
@@ -27,8 +28,8 @@ def build_extractor(
     if prompt_template_path is None:
         prompt_template_path = Path(__file__).parent / "prompts" / "extractor_prompt.txt"
 
-    prompt_raw = Path(prompt_template_path).read_text()
-    system_prompt = prompt_raw.format(
+    prompt_template = Prompt.from_path(prompt_template_path, meta="allow").prompt
+    system_prompt = prompt_template.format(
         categories_doc=docs,
     )
 

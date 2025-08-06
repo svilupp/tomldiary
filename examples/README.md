@@ -47,6 +47,8 @@ Celebrity chefs interact with an AI host, naturally revealing their culinary pre
 - Natural preference extraction from organic dialogue
 - Multi-turn conversations with message history
 - Three chef personalities: British perfectionist, French traditionalist, Asian-Italian fusion expert
+- Direct `diary.update_memory()` calls for reliable memory persistence
+- Automatic conversation summary extraction and storage
 
 **Run:**
 ```bash

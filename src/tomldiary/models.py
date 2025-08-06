@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-_MODEL_VERSION = "0.2"
+_MODEL_VERSION = "0.3"
 
 
 # ───────── metadata for TOML files ─────────
@@ -43,12 +43,14 @@ class PreferenceItem(BaseModel):
 class ConversationItem(BaseModel):
     """
     created   : session start (prefixed with _ in TOML)
+    updated   : last update timestamp (prefixed with _ in TOML)
     turns     : total user↔assistant pairs (prefixed with _ in TOML)
     summary   : rolling abstract
     keywords  : key nouns / verbs
     """
 
     created: str = Field(default_factory=lambda: datetime.now(UTC).isoformat(), alias="_created")
+    updated: str = Field(default_factory=lambda: datetime.now(UTC).isoformat(), alias="_updated")
     turns: int = Field(default=0, alias="_turns")
     summary: str = ""
     keywords: list[str] = []
@@ -75,7 +77,7 @@ class MemoryDeps:
         return "\n".join(out) or "(none)"
 
     def pretty_session(self, sid: str) -> str:
-        c = self.convs[sid]
+        c = self.convs["conversations"][sid]
         kws = ", ".join(c["keywords"])
         return (
             f"Started: {c['_created']}  •  Turns: {c['_turns']}\n"

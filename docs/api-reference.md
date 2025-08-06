@@ -28,11 +28,11 @@ class Diary:
 
 #### Methods
 
-##### `async def preferences(user_id: str) -> str`
-Returns user preferences as a TOML string.
+##### `async def preferences(user_id: str, skip_metadata: bool = False) -> str`
+Returns user preferences as a TOML string. If `skip_metadata=True`, excludes the `_meta` section from the output.
 
-##### `async def last_conversations(user_id: str, n: int = 3) -> Dict[str, ConversationItem]`
-Returns the last N conversations for a user.
+##### `async def last_conversations(user_id: str, limit: int = 3, skip_metadata: bool = False) -> Dict[str, ConversationItem]`
+Returns the last N conversations for a user. If `skip_metadata=True`, excludes the `_meta` section from the output.
 
 ##### `async def ensure_session(user_id: str, session_id: str) -> bool`
 Creates a new session if it doesn't exist. Returns True if created.
@@ -66,7 +66,7 @@ class MemoryWriter:
 
 #### Methods
 
-##### `async def submit(user_id: str, session_id: str, user_message: str, assistant_response: str)`
+##### `async def submit(user_id: str, session_id: str, user_msg: str, assistant_msg: str)`
 Queue a memory update for background processing.
 
 ##### `async def close()`
@@ -137,19 +137,41 @@ Save a TOML file for a user with atomic writes.
 
 ## Tools
 
-The extraction agent has access to these tools:
+The extraction agent has access to these enhanced tools with smart deduplication and limit enforcement:
 
-### `read_preference(category: str) -> List[PreferenceItem]`
-Read all preferences in a category.
+### `list_categories() -> str`
+List all available preference categories with their exact names.
 
-### `upsert_preference(category: str, item_id: str, text: str, contexts: List[str])`
-Create or update a preference.
+### `list_preferences(category: str | None = None) -> str`
+List existing preferences with visual limit indicators (✅/⚠️/❌) and usage counts.
+- Shows current category limits and space availability
+- Displays preferences in format: `category/id: text (count×)`
+- Essential for checking existing preferences before creating new ones
 
-### `forget_preference(category: str, item_id: str)`
-Remove a preference.
+### `upsert_preference(category: str, id: str | None = None, text: str | None = None, contexts: List[str] | None = None, suppress_count_increment: bool = False) -> str`
+**Enhanced preference management with smart deduplication:**
 
-### `summarize_conversation(summary: str, keywords: List[str])`
-Update the current conversation summary.
+**CRITICAL WORKFLOW:**
+1. **ALWAYS** call `list_preferences(category)` first to check existing preferences
+2. **Boost existing**: `upsert_preference('likes', id='pref001')` - auto-increments count
+3. **Update existing**: `upsert_preference('likes', id='pref001', text='new text')`
+4. **Create new**: `upsert_preference('likes', text='new preference')`
+5. **Force create**: `upsert_preference('likes', id='new', text='similar item')` - bypasses similarity detection
+
+**Smart Features:**
+- **Similarity Detection**: Uses FuzzyWuzzy (70% threshold) to prevent duplicates
+- **Limit Enforcement**: Pre-flight checking prevents failed operations
+- **Intelligent Errors**: Shows similar preferences with match percentages
+- **Auto-increment**: Counts increment by default unless `suppress_count_increment=True`
+
+### `forget_preference(category: str, id: str) -> str`
+Remove a specific preference using exact category/id from `list_preferences()` output.
+
+### `list_conversation_summary(session_id: str) -> str`
+Get summary of a specific conversation session.
+
+### `update_conversation_summary(summary: str, keywords: List[str] | None = None) -> str`
+Update the summary and keywords for the current conversation session.
 
 ## Utility Functions
 

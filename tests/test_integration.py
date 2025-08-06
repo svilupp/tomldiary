@@ -125,8 +125,8 @@ class TestIntegration:
         assert "peanuts" in preferences["allergy"]
 
         # Check conversations
-        convs = await diary.last_conversations(user_id, n=5)
-        assert len(convs) == 2  # Two unique sessions
+        convs = await diary.last_conversations(user_id, limit=5)
+        assert len(convs) == 3  # Two unique sessions + _meta
         assert "session1" in convs
         assert "session2" in convs
         assert convs["session1"]["_turns"] == 2  # Two messages in session1
@@ -211,8 +211,8 @@ class TestIntegration:
         await asyncio.sleep(2)
 
         # Should only have 2 conversations (limit)
-        convs = await diary.last_conversations(user_id, n=10)
-        assert len(convs) <= 2
+        convs = await diary.last_conversations(user_id, limit=10)
+        assert len(convs) <= 3  # 2 conversations + _meta
 
         await writer.close()
 
@@ -247,8 +247,8 @@ class TestIntegration:
         assert "like" in preferences
         assert "pizza" in preferences["like"]
 
-        convs = await diary2.last_conversations(user_id, n=5)
-        assert len(convs) == 1
+        convs = await diary2.last_conversations(user_id, limit=5)
+        assert len(convs) == 2  # 1 session + _meta
         assert "session1" in convs
 
     @pytest.mark.asyncio
@@ -300,7 +300,7 @@ class TestIntegration:
         await asyncio.sleep(2)
 
         # Verify data integrity
-        convs = await diary.last_conversations(user_id, n=5)
+        convs = await diary.last_conversations(user_id, limit=5)
         assert session_id in convs
 
         # Turn count should reflect all updates
@@ -315,6 +315,86 @@ class TestIntegration:
         assert "_meta" in prefs_data
 
         await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_conversation_summary_persistence(self, temp_dir):
+        """Test that conversation summary updates are actually saved to disk"""
+        from pydantic import BaseModel
+
+        from tomldiary.models import PreferenceItem
+        from tomldiary.tools import update_conversation_summary
+
+        backend = LocalBackend(temp_dir)
+
+        class TestPrefTable(BaseModel):
+            likes: dict[str, PreferenceItem] = {}
+
+        # Create agent that calls update_conversation_summary tool
+        class SummaryUpdatingAgent:
+            def __init__(self):
+                self.run_calls = []
+
+            async def run(self, message, deps=None):
+                """Mock agent that calls update_conversation_summary tool"""
+                self.run_calls.append((message, deps))
+
+                if not deps:
+                    return
+
+                # Create a RunContext to pass to the tool
+                class MockContext:
+                    def __init__(self, deps):
+                        self.deps = deps
+
+                ctx = MockContext(deps)
+
+                # Call the update_conversation_summary tool to simulate agent behavior
+                summary = "User discusses their food preferences and cooking habits"
+                keywords = ["food", "pasta", "italian", "cooking"]
+
+                await update_conversation_summary(ctx, summary, keywords)
+
+        agent = SummaryUpdatingAgent()
+        diary = Diary(backend, TestPrefTable, agent=(agent, ["likes"]))
+
+        user_id = "test_user"
+        session_id = "test_session"
+
+        # Create a session and update memory
+        await diary.ensure_session(user_id, session_id)
+
+        # Update memory - this should call our mock agent which calls update_conversation_summary
+        await diary.update_memory(
+            user_id,
+            session_id,
+            "I really love Italian pasta dishes, especially carbonara and bolognese.",
+            "I'll remember your preference for Italian pasta dishes.",
+        )
+
+        # Verify the agent was called
+        assert len(agent.run_calls) == 1
+
+        # Verify conversation was created
+        convs_data = await diary.last_conversations(user_id)
+        assert session_id in convs_data
+        assert convs_data[session_id]["_turns"] == 1
+
+        # Read the actual TOML file to verify summary was saved to disk
+        conv_file = temp_dir / user_id / "conversations.toml"
+        assert conv_file.exists(), "Conversations TOML file should exist"
+
+        # Parse the TOML file directly to verify the summary was persisted
+        with open(conv_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        assert "conversations" in saved_data
+        assert session_id in saved_data["conversations"]
+        saved_conv = saved_data["conversations"][session_id]
+
+        # Verify the conversation summary was properly saved to disk
+        assert saved_conv["_turns"] == 1
+        assert saved_conv["summary"] == "User discusses their food preferences and cooking habits"
+        assert saved_conv["keywords"] == ["food", "pasta", "italian", "cooking"]
 
     @pytest.mark.asyncio
     async def test_error_recovery(self, temp_dir):
@@ -348,7 +428,7 @@ class TestIntegration:
         await asyncio.sleep(2)  # Wait for processing
 
         # System should still be functional despite some failures
-        convs = await diary.last_conversations("user", n=5)
+        convs = await diary.last_conversations("user", limit=5)
         # Some conversations should succeed (not all will fail)
         # The exact count depends on timing, but should be > 0
         assert len(convs) >= 0  # System shouldn't crash
