@@ -153,9 +153,10 @@ class Diary:
 
         # Combine all data
         structured_input = (
-            format_as_xml(unsafe_inputs, root_tag="unsafe_inputs")
-            + "\n\n"
-            + format_as_xml(current_diary, root_tag="current_diary")
+            "Current memory state to be potentially updated:\n"
+            + format_as_xml(current_diary, root_tag="current_memory")
+            + "\n\nUnsafe user inputs to be reviewed:\n"
+            + format_as_xml(unsafe_inputs, root_tag="unsafe_inputs")
         )
 
         # Use the stable agent

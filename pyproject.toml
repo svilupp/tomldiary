@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
     "pydantic>=2",
     "pydantic-ai",
+    "textprompts>=0.0.4",
     "thefuzz>=0.22.1",
     "tomli-w",
 ]

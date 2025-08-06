@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from thefuzz import fuzz
 from pydantic_ai import RunContext
+from thefuzz import fuzz
 
 from .models import MemoryDeps
 
@@ -26,7 +26,6 @@ async def list_preferences(
 ) -> str:  # pragma: no cover
     """List existing preferences, optionally filtered by category.
 
-    CRITICAL: Always call this BEFORE creating new preferences to check for duplicates!
     Look for similar preferences that should be updated instead of creating new ones.
 
     Parameters:
@@ -91,7 +90,9 @@ def _check_preference_limits(ctx: RunContext[MemoryDeps], category: str) -> str:
         return f"✅ Category '{category}' has space ({current_count}/{max_count})"
 
 
-def _find_similar_preferences(ctx: RunContext[MemoryDeps], category: str, text: str, min_similarity: int = 70) -> list[tuple[str, str, int]]:  # pragma: no cover
+def _find_similar_preferences(
+    ctx: RunContext[MemoryDeps], category: str, text: str, min_similarity: int = 70
+) -> list[tuple[str, str, int]]:  # pragma: no cover
     """Find existing preferences with similar text, ranked by similarity score
 
     Returns list of tuples: (pref_id_with_category, actual_text, similarity_score)
@@ -222,7 +223,7 @@ async def upsert_preference(
             "contexts": contexts,
             "_created_by": session_id,
             "_updated_by": session_id,
-            "text": text
+            "text": text,
         }
         cat_tbl[id] = tbl
         return f"✅ Created {category}/{id}: '{text}'."
