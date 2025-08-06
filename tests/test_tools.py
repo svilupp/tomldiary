@@ -501,14 +501,11 @@ class TestOtherTools:
         deps = create_mock_deps()
         ctx = MockContext(deps)
 
-        # Need to fix the conversations structure for the tool to work
-        ctx.deps.convs["session1"] = ctx.deps.convs["conversations"]["session1"]
-
         result = await update_conversation_summary(ctx, "Updated summary", ["keyword1", "keyword2"])
 
         assert "✅ Updated conversation summary" in result
-        assert ctx.deps.convs["session1"]["summary"] == "Updated summary"
-        assert ctx.deps.convs["session1"]["keywords"] == ["keyword1", "keyword2"]
+        assert ctx.deps.convs["conversations"]["session1"]["summary"] == "Updated summary"
+        assert ctx.deps.convs["conversations"]["session1"]["keywords"] == ["keyword1", "keyword2"]
 
 
 class TestNewFunctionalityIntegration:

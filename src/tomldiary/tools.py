@@ -275,14 +275,14 @@ async def update_conversation_summary(
     """
     session_id = ctx.deps.session_id
 
-    if session_id not in ctx.deps.convs:
+    if session_id not in ctx.deps.convs.get("conversations", {}):
         return f"❌ Session '{session_id}' not found."
 
     # Update summary
-    ctx.deps.convs[session_id]["summary"] = summary
+    ctx.deps.convs["conversations"][session_id]["summary"] = summary
 
     # Update keywords if provided
     if keywords is not None:
-        ctx.deps.convs[session_id]["keywords"] = keywords
+        ctx.deps.convs["conversations"][session_id]["keywords"] = keywords
 
     return f"✅ Updated conversation summary for session '{session_id}'."

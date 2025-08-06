@@ -8,8 +8,9 @@ TOMLDiary is a dead-simple, customizable memory system for agentic applications.
 
 - **Human-readable TOML storage** – easy to inspect, debug and manage.
 - **Fully customizable** – define your own memory schema with simple Pydantic models.
-- **Smart deduplication** – prevents duplicate preferences with intelligent similarity detection.
-- **Configurable limits** – enforces memory limits with graceful degradation.
+- **Smart deduplication** – prevents duplicate preferences with FuzzyWuzzy similarity detection (70% threshold).
+- **Enhanced limit enforcement** – visual indicators and pre-flight checking prevent failed operations.
+- **Force creation mechanism** – bypass similarity detection when needed with `id="new"` parameter.
 - **Minimal overhead** – lightweight design, backend agnostic and easy to integrate.
 - **Atomic, safe writes** – ensures data integrity with proper file locking.
 
@@ -58,8 +59,8 @@ await diary.ensure_session(user_id, session_id)
 await diary.update_memory(
     user_id,
     session_id,
-    user_message="I'm allergic to walnuts.",
-    agent_response="I'll remember you're allergic to walnuts.",
+    user_msg="I'm allergic to walnuts.",
+    assistant_msg="I'll remember you're allergic to walnuts.",
 )
 ```
 
@@ -113,6 +114,28 @@ class DetailedPrefTable(BaseModel):
     goals: Dict[str, PreferenceItem] = {}
     family: Dict[str, PreferenceItem] = {}
     work: Dict[str, PreferenceItem] = {}
+```
+
+### Smart Preference Management
+
+The system includes enhanced tools for intelligent preference management:
+
+```python
+# The extraction agent uses these enhanced tools automatically:
+# - list_preferences(category) - shows limits with visual indicators (✅/⚠️/❌)  
+# - upsert_preference() with smart workflows:
+#   * Similarity detection prevents duplicates
+#   * Auto-increment counts on updates  
+#   * Force creation with id="new" when needed
+#   * Intelligent error messages with match percentages
+
+# Examples of enhanced error messages:
+# "❌ Similar preferences found:
+#   • likes/pref001: 'black blazers for work' (85% match)
+#   • likes/pref003: 'dark blazers' (72% match)
+# 
+# To update existing: upsert_preference('likes', id='pref001')
+# To force create anyway: upsert_preference('likes', id='new', text='black blazers')"
 ```
 
 ### Backend Options
@@ -172,9 +195,11 @@ Background queue for non-blocking writes:
 ## Examples
 
 See the `examples/` directory for:
-- `example_simple_demo.py`: Basic usage without LLM
-- `example_tomldiary.py`: Full LLM integration
-- `example_multi_user.py`: Concurrent multi-user scenario
+- `simple_example.py`: Basic usage with educational agent (no LLM required)
+- `example_cooking_show.py`: Advanced AI-powered cooking show with celebrity chef interviews
+- `culinary_prefs.py`: Custom preference schema for culinary applications
+
+**Note**: Examples use custom agents for educational purposes. The built-in extraction agent automatically uses the enhanced smart deduplication and limit enforcement tools described above.
 
 ## Development
 

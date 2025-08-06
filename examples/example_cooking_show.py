@@ -2,31 +2,37 @@
 """
 🍳 Cooking Show Memory System with AI Chefs
 Celebrity chefs discuss their culinary preferences with an AI host.
+Uses direct diary.update_memory() calls for simple, reliable memory updates.
 """
 
 import asyncio
 from pathlib import Path
 from pydantic_ai import Agent, RunContext
-from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
+from tomldiary import Diary
 from tomldiary.backends.local import LocalBackend
 from culinary_prefs import CulinaryPrefTable
-import tomllib
-from typing import Dict, Any
+
+## Enable logfire for better observability
+import os
+from dotenv import load_dotenv
+load_dotenv()
+import logfire
+logfire.configure(scrubbing=False, service_name="cooking_show", send_to_logfire='if-token-present')
+logfire.instrument_pydantic_ai()
 
 
 # Define the deps type for our cooking show context
 class CookingShowContext:
-    def __init__(self, chef_name: str, episode: str, diary: Diary, writer: MemoryWriter):
+    def __init__(self, chef_name: str, episode: str, diary: Diary, personality: str = ""):
         self.chef_name = chef_name
         self.episode = episode
         self.diary = diary
-        self.writer = writer
-        self.prefs: Dict[str, Any] = {"preferences": {}}
+        self.personality = personality
 
 
 # Create the cooking show host agent
 host_agent = Agent(
-    'openai:gpt-4o-mini',
+    'openai:gpt-4.1-mini',
     deps_type=CookingShowContext,
     system_prompt="""You are a friendly cooking show host interviewing celebrity chefs.
     Ask about their favorite dishes, cooking techniques, dietary restrictions, and culinary experiences.
@@ -34,75 +40,76 @@ host_agent = Agent(
 )
 
 
-# Create the celebrity chef agent
+# Create the celebrity chef agent with dynamic memory awareness
 chef_agent = Agent(
-    'openai:gpt-4o-mini',
+    'openai:gpt-4.1-mini',
     deps_type=CookingShowContext,
     system_prompt="""You are a celebrity chef on a cooking show. You have strong opinions about food.
     Share your culinary preferences, favorite dishes, cooking habits, and any dietary restrictions.
-    Be passionate and specific about your likes and dislikes. Each chef has a unique personality."""
+    Be passionate and specific about your likes and dislikes. Stay consistent with any preferences you've previously mentioned."""
 )
 
 
-@host_agent.tool
-async def save_memory(ctx: RunContext[CookingShowContext], user_msg: str, assistant_msg: str) -> str:
-    """Save the conversation to memory"""
-    await ctx.deps.writer.submit(
-        ctx.deps.chef_name,
-        ctx.deps.episode,
-        user_msg,
-        assistant_msg
-    )
-    return "Memory saved"
-
-
-@chef_agent.tool  
-async def record_preference(ctx: RunContext[CookingShowContext], category: str, item: str, text: str, contexts: list[str]) -> str:
-    """Record a preference in the chef's profile"""
-    prefs = ctx.deps.prefs.setdefault("preferences", {})
-    cat_prefs = prefs.setdefault(category, {})
+@chef_agent.system_prompt
+async def add_chef_memory(ctx: RunContext[CookingShowContext]) -> str:
+    """Add the chef's existing memory context to the system prompt."""
+    # Use diary's built-in pretty printing methods
+    memory_parts = []
     
-    cat_prefs[item] = {
-        "text": text,
-        "contexts": contexts,
-        "_count": cat_prefs.get(item, {}).get("_count", 0) + 1,
-        "_created": "2024-01-01T00:00:00Z",
-        "_updated": "2024-01-01T00:00:00Z"
-    }
+    # Get formatted preferences
+    formatted_prefs = await ctx.deps.diary.pretty_preferences(ctx.deps.chef_name)
+    if formatted_prefs != "No preferences found for user.":
+        memory_parts.append("Your existing preferences:")
+        memory_parts.append(formatted_prefs)
     
-    return f"Recorded {category}: {item}"
+    # Get formatted conversations
+    formatted_convs = await ctx.deps.diary.pretty_conversations(ctx.deps.chef_name, limit=3)
+    if formatted_convs != "No conversations found for user.":
+        memory_parts.append("Recent conversation highlights:")
+        memory_parts.append(formatted_convs)
+    
+    return "\n\n".join(memory_parts) if memory_parts else ""
 
 
-async def chef_interview(chef_name: str, chef_personality: str, episodes: list[tuple[str, str]], diary: Diary, writer: MemoryWriter):
-    """Conduct an interview with a celebrity chef"""
+@chef_agent.system_prompt
+def add_chef_personality(ctx: RunContext[CookingShowContext]) -> str:
+    """Add the chef's personality to the system prompt."""
+    if ctx.deps.personality:
+        return f"Your personality: {ctx.deps.personality}"
+    return ""
+
+
+async def chef_interview(chef_name: str, chef_personality: str, episodes: list[tuple[str, str]], diary: Diary):
+    """Conduct an interview with a celebrity chef using AI agents"""
     
     for episode, topic in episodes:
         print(f"\n📺 {chef_name} - Episode: {episode}")
         print("-" * 40)
         
-        context = CookingShowContext(chef_name, episode, diary, writer)
-        
-        # Customize chef's personality
-        chef_with_personality = chef_agent.override(
-            system_prompt=chef_agent._system_prompt + f"\n\nYour personality: {chef_personality}"
-        )
+        # Create context with personality included
+        context = CookingShowContext(chef_name, episode, diary, chef_personality)
         
         # Host introduces the topic
         host_intro = await host_agent.run(
             f"Welcome chef! Today let's talk about {topic}. What are your thoughts?",
             deps=context
         )
-        print(f"🎤 Host: {host_intro.data}")
+        print(f"🎤 Host: {host_intro.output}")
         
-        # Chef responds
-        chef_response = await chef_with_personality.run(
-            host_intro.data,
+        # Chef responds (system prompt will dynamically include memory and personality)
+        chef_response = await chef_agent.run(
+            host_intro.output,
             deps=context
         )
-        print(f"👨‍🍳 {chef_name}: {chef_response.data}")
+        print(f"👨‍🍳 {chef_name}: {chef_response.output}")
         
-        # Save the initial exchange
-        await context.writer.submit(chef_name, episode, host_intro.data, chef_response.data)
+        # Update memory using direct diary.update_memory() call
+        await diary.update_memory(
+            user_id=chef_name,
+            session_id=episode,
+            user_msg=host_intro.output,
+            assistant_msg=chef_response.output
+        )
         
         # Continue conversation with follow-up
         host_followup = await host_agent.run(
@@ -110,17 +117,22 @@ async def chef_interview(chef_name: str, chef_personality: str, episodes: list[t
             deps=context,
             message_history=host_intro.new_messages()
         )
-        print(f"🎤 Host: {host_followup.data}")
+        print(f"🎤 Host: {host_followup.output}")
         
-        chef_detail = await chef_with_personality.run(
-            host_followup.data,
+        chef_detail = await chef_agent.run(
+            host_followup.output,
             deps=context,
             message_history=chef_response.new_messages()
         )
-        print(f"👨‍🍳 {chef_name}: {chef_detail.data}")
+        print(f"👨‍🍳 {chef_name}: {chef_detail.output}")
         
-        # Save the follow-up
-        await context.writer.submit(chef_name, episode, host_followup.data, chef_detail.data)
+        # Update memory for the follow-up exchange
+        await diary.update_memory(
+            user_id=chef_name,
+            session_id=episode,
+            user_msg=host_followup.output,
+            assistant_msg=chef_detail.output
+        )
 
 
 async def cooking_show_demo():
@@ -131,158 +143,13 @@ async def cooking_show_demo():
     # Setup
     backend = LocalBackend(Path("memory_cooking_show"))
     
-    # Create diary with the original CulinaryAgent for memory extraction
-    from tomldiary import Diary
-    
-    class CulinaryAgent:
-        """Agent that extracts cooking preferences from conversations."""
-        
-        async def run(self, message: str, deps=None):
-            if not deps:
-                return
-            
-            msg_lower = message.lower()
-            prefs = deps.prefs.setdefault("preferences", {})
-            
-            # Extract favorite foods
-            if any(word in msg_lower for word in ["love", "favorite", "enjoy", "best", "prefer", "fantastic", "amazing"]):
-                favorite_foods = prefs.setdefault("favorite_foods", {})
-                
-                if "pasta" in msg_lower:
-                    favorite_foods["pasta"] = {
-                        "text": "enjoys pasta dishes",
-                        "contexts": ["italian", "comfort-food"],
-                        "_count": favorite_foods.get("pasta", {}).get("_count", 0) + 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "sushi" in msg_lower:
-                    favorite_foods["sushi"] = {
-                        "text": "loves sushi",
-                        "contexts": ["japanese", "seafood"],
-                        "_count": favorite_foods.get("sushi", {}).get("_count", 0) + 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "chocolate" in msg_lower:
-                    favorite_foods["chocolate"] = {
-                        "text": "chocolate lover",
-                        "contexts": ["dessert", "sweet"],
-                        "_count": favorite_foods.get("chocolate", {}).get("_count", 0) + 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-            
-            # Extract cooking techniques
-            if any(word in msg_lower for word in ["technique", "method", "style", "way"]):
-                techniques = prefs.setdefault("cooking_techniques", {})
-                
-                if "grill" in msg_lower or "bbq" in msg_lower:
-                    techniques["grilling"] = {
-                        "text": "specializes in grilling and BBQ",
-                        "contexts": ["technique", "outdoor"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "french" in msg_lower and ("technique" in msg_lower or "method" in msg_lower):
-                    techniques["french_cooking"] = {
-                        "text": "trained in French cooking techniques",
-                        "contexts": ["technique", "classical"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-            
-            # Extract dislikes
-            if any(word in msg_lower for word in ["hate", "dislike", "avoid", "never", "can't stand", "terrible"]):
-                dislikes = prefs.setdefault("dislike", {})
-                
-                if "spicy" in msg_lower:
-                    dislikes["spicy_food"] = {
-                        "text": "avoids spicy food",
-                        "contexts": ["preference"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "overcooked" in msg_lower or "overcook" in msg_lower:
-                    dislikes["overcooked_food"] = {
-                        "text": "hates overcooked food",
-                        "contexts": ["technique", "quality"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-            
-            # Extract dietary restrictions
-            if any(word in msg_lower for word in ["allergic", "allergy", "vegetarian", "vegan", "gluten", "lactose"]):
-                restrictions = prefs.setdefault("dietary_restrictions", {})
-                
-                if "nuts" in msg_lower or "peanut" in msg_lower:
-                    restrictions["nuts"] = {
-                        "text": "nut allergy",
-                        "contexts": ["health", "critical"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "shellfish" in msg_lower:
-                    restrictions["shellfish"] = {
-                        "text": "shellfish allergy",
-                        "contexts": ["health", "seafood"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-            
-            # Extract cooking habits
-            if any(word in msg_lower for word in ["always", "every", "daily", "regularly", "routine", "habit"]):
-                habits = prefs.setdefault("cooking_habits", {})
-                
-                if "breakfast" in msg_lower:
-                    habits["breakfast_cooking"] = {
-                        "text": "cooks breakfast regularly",
-                        "contexts": ["morning", "routine"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "taste" in msg_lower and "while" in msg_lower:
-                    habits["taste_while_cooking"] = {
-                        "text": "always tastes food while cooking",
-                        "contexts": ["technique", "quality"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-                
-                if "fresh" in msg_lower and ("pasta" in msg_lower or "ingredient" in msg_lower):
-                    habits["fresh_ingredients"] = {
-                        "text": "uses fresh ingredients daily",
-                        "contexts": ["quality", "sourcing"],
-                        "_count": 1,
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_updated": "2024-01-01T00:00:00Z"
-                    }
-    
-    agent = CulinaryAgent()
-    
+    # Create diary with build_extractor (proper approach)
     diary = Diary(
         backend=backend,
         pref_table_cls=CulinaryPrefTable,
-        agent=(agent, ["favorite_foods", "cooking_techniques", "flavor_preferences", "dislikes", "dietary_restrictions", "cooking_habits", "ingredient_preferences"]),
         max_prefs_per_category=10,
         max_conversations=5
     )
-    
-    writer = MemoryWriter(diary, workers=4, qsize=20)
     
     # Chef personalities and interview topics
     chefs = [
@@ -304,68 +171,52 @@ async def cooking_show_demo():
     print("\n🎬 Starting celebrity chef interviews...\n")
     
     for chef_name, personality, episodes in chefs:
-        await chef_interview(chef_name, personality, episodes, diary, writer)
+        await chef_interview(chef_name, personality, episodes, diary)
         await asyncio.sleep(0.5)  # Brief pause between chefs
     
-    # Let processing complete
-    await asyncio.sleep(1)
-    
-    # Display the memories
-    print("\n\n📚 Chef Profiles & Memories:")
+    print("\n📚 Chef Memory Profiles:")
     print("=" * 50)
     
-    for chef_name, _, _ in chefs:
-        print(f"\n👨‍🍳 {chef_name.upper()}")
+    # Display the memories for each chef
+    chefs = ["chef_gordon", "chef_julia", "chef_marco"]
+    
+    for chef_name in chefs:
+        print(f"\n👨‍🍳 {chef_name.upper().replace('_', ' ')}")
         print("-" * 30)
         
         # Show preferences
-        prefs_toml = await diary.preferences(chef_name)
-        if prefs_toml:
-            prefs_data = tomllib.loads(prefs_toml)
-            preferences = prefs_data.get("preferences", {})
-            
-            if "favorite_foods" in preferences:
-                print("  🍽️  Favorite Foods:")
-                for item, details in preferences["favorite_foods"].items():
-                    print(f"    - {item}: {details['text']} (mentioned {details.get('_count', 1)}x)")
-            
-            if "cooking_techniques" in preferences:
-                print("  👨‍🍳 Cooking Techniques:")
-                for item, details in preferences["cooking_techniques"].items():
-                    print(f"    - {item}: {details['text']}")
-            
-            if "dislikes" in preferences:
-                print("  👎 Dislikes:")
-                for item, details in preferences["dislikes"].items():
-                    print(f"    - {item}: {details['text']}")
-            
-            if "dietary_restrictions" in preferences:
-                print("  ⚠️  Dietary Restrictions:")
-                for item, details in preferences["dietary_restrictions"].items():
-                    print(f"    - {item}: {details['text']}")
-            
-            if "cooking_habits" in preferences:
-                print("  🔄 Cooking Habits:")
-                for item, details in preferences["cooking_habits"].items():
-                    print(f"    - {item}: {details['text']}")
+        formatted_prefs = await diary.pretty_preferences(chef_name)
+        if formatted_prefs != "No preferences found for user.":
+            print("🍽️  Culinary Preferences:")
+            for line in formatted_prefs.split('\n'):
+                if line.strip():
+                    print(f"  {line}")
         
-        # Show episodes
-        conversations = await diary.last_conversations(chef_name, limit=5)
-        if conversations:
-            print(f"  📺 Recent Episodes ({len(conversations)}):")
-            for session_id, conv in conversations.items():
-                print(f"    - {session_id}: {conv['_turns']} segments recorded")
+        # Show conversation summaries
+        formatted_convs = await diary.pretty_conversations(chef_name, limit=3)
+        if formatted_convs != "No conversations found for user.":
+            print(f"\n📺 Recent Sessions:")
+            for line in formatted_convs.split('\n'):
+                if line.strip():
+                    print(f"  {line}")
     
-    # Show sample TOML
-    print("\n📄 Sample TOML file (chef_gordon preferences):")
+    # Show raw TOML for one chef
+    print(f"\n📄 Sample TOML (chef_gordon preferences):")
     print("-" * 50)
     gordon_prefs = await diary.preferences("chef_gordon")
     if gordon_prefs:
-        print(gordon_prefs[:500] + "..." if len(gordon_prefs) > 500 else gordon_prefs)
+        # Show first 800 characters
+        preview = gordon_prefs[:800] + "..." if len(gordon_prefs) > 800 else gordon_prefs
+        print(preview)
     
-    # Cleanup
-    await writer.close()
-    await shutdown_all_background_tasks()
+    # Show conversation TOML
+    print(f"\n📄 Sample TOML (chef_gordon conversations):")
+    print("-" * 50)
+    gordon_convs = await diary.last_conversations("chef_gordon", limit=2)
+    if gordon_convs:
+        import tomli_w
+        convs_preview = tomli_w.dumps(gordon_convs)[:600] + "..." if len(tomli_w.dumps(gordon_convs)) > 600 else tomli_w.dumps(gordon_convs)
+        print(convs_preview)
     
     print("\n✨ Cooking show memories saved successfully!")
     print(f"📁 Check the 'memory_cooking_show' directory for TOML files")
