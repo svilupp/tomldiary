@@ -226,8 +226,8 @@ memory_updates = Counter('memory_updates_total', 'Total memory updates')
 update_duration = Histogram('memory_update_duration_seconds', 'Memory update duration')
 
 class MetricsMemoryWriter(MemoryWriter):
-    async def submit(self, user_id, session_id, user_message, assistant_response):
+    async def submit(self, user_id, session_id, user_msg, assistant_msg):
         memory_updates.inc()
         with update_duration.time():
-            await super().submit(user_id, session_id, user_message, assistant_response)
+            await super().submit(user_id, session_id, user_msg, assistant_msg)
 ```

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Pretty printing utilities (`PreferencesPrinter`, `ConversationsPrinter`) and diary methods `pretty_preferences()` and `pretty_conversations()` for convenience
 
+### Fixed
+- Fixed `update_conversation_summary` tool to correctly access nested conversation structure, ensuring conversation summaries are properly persisted to disk
+- Updated cooking show example to use direct `diary.update_memory()` calls for reliable memory persistence
+
 
 
 ## [0.0.1] - 2025-07-20

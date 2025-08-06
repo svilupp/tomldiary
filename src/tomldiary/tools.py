@@ -129,11 +129,10 @@ async def upsert_preference(
     """Create new preference OR update existing one.
 
     CRITICAL WORKFLOW:
-    1. ALWAYS call list_preferences(category) first to check for existing preferences
-    2. To BOOST EXISTING: Just provide category and ID - count auto-increments!
-    3. To UPDATE EXISTING: Provide category, ID, and new text
-    4. To CREATE NEW: Provide category and text (id=None)
-    5. To FORCE CREATE despite similarities: Use id="new"
+    1. To BOOST EXISTING: Just provide category and ID - count auto-increments!
+    2. To UPDATE EXISTING: Provide category, ID, and new text
+    3. To CREATE NEW: Provide category and text (id=None)
+    4. To FORCE CREATE despite similarities: Use id="new"
 
     Parameters:
     - category: One of the allowed categories from list_categories()
