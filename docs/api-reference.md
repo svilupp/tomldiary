@@ -28,11 +28,11 @@ class Diary:
 
 #### Methods
 
-##### `async def preferences(user_id: str) -> str`
-Returns user preferences as a TOML string.
+##### `async def preferences(user_id: str, skip_metadata: bool = False) -> str`
+Returns user preferences as a TOML string. If `skip_metadata=True`, excludes the `_meta` section from the output.
 
-##### `async def last_conversations(user_id: str, n: int = 3) -> Dict[str, ConversationItem]`
-Returns the last N conversations for a user.
+##### `async def last_conversations(user_id: str, limit: int = 3, skip_metadata: bool = False) -> Dict[str, ConversationItem]`
+Returns the last N conversations for a user. If `skip_metadata=True`, excludes the `_meta` section from the output.
 
 ##### `async def ensure_session(user_id: str, session_id: str) -> bool`
 Creates a new session if it doesn't exist. Returns True if created.

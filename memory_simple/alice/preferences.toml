@@ -1,0 +1,30 @@
+[_meta]
+version = "0.3"
+schema_name = "SimplePrefTable"
+
+[preferences.like.pizza]
+text = "enjoys pizza"
+contexts = [
+    "food",
+]
+_count = 2
+_created = "2024-01-01T00:00:00Z"
+_updated = "2024-01-01T00:00:00Z"
+
+[preferences.like.coffee]
+text = "coffee lover"
+contexts = [
+    "beverage",
+]
+_count = 2
+_created = "2024-01-01T00:00:00Z"
+_updated = "2024-01-01T00:00:00Z"
+
+[preferences.dislike.spicy_food]
+text = "dislikes spicy food"
+contexts = [
+    "food",
+]
+_count = 1
+_created = "2024-01-01T00:00:00Z"
+_updated = "2024-01-01T00:00:00Z"

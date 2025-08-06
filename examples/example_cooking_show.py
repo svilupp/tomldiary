@@ -350,7 +350,7 @@ async def cooking_show_demo():
                     print(f"    - {item}: {details['text']}")
         
         # Show episodes
-        conversations = await diary.last_conversations(chef_name, n=5)
+        conversations = await diary.last_conversations(chef_name, limit=5)
         if conversations:
             print(f"  📺 Recent Episodes ({len(conversations)}):")
             for session_id, conv in conversations.items():

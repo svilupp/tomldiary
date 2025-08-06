@@ -89,7 +89,7 @@ The preferences file might look like:
 
 ```toml
 [_meta]
-version = "0.2"
+version = "0.3"
 schema_name = "SimplePrefTable"
 
 [preferences.like.chocolate_ice_cream]

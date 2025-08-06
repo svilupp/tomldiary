@@ -160,7 +160,7 @@ async def simple_demo():
                         print(f"    • {details['text']}{count_text}")
 
         # Show conversations
-        conversations_data = await diary.last_conversations(user, n=5)
+        conversations_data = await diary.last_conversations(user, limit=5)
         if conversations_data:
             print(f"  conversations: {len(conversations_data)} sessions")
 

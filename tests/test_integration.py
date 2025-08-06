@@ -125,8 +125,8 @@ class TestIntegration:
         assert "peanuts" in preferences["allergy"]
 
         # Check conversations
-        convs = await diary.last_conversations(user_id, n=5)
-        assert len(convs) == 2  # Two unique sessions
+        convs = await diary.last_conversations(user_id, limit=5)
+        assert len(convs) == 3  # Two unique sessions + _meta
         assert "session1" in convs
         assert "session2" in convs
         assert convs["session1"]["_turns"] == 2  # Two messages in session1
@@ -211,8 +211,8 @@ class TestIntegration:
         await asyncio.sleep(2)
 
         # Should only have 2 conversations (limit)
-        convs = await diary.last_conversations(user_id, n=10)
-        assert len(convs) <= 2
+        convs = await diary.last_conversations(user_id, limit=10)
+        assert len(convs) <= 3  # 2 conversations + _meta
 
         await writer.close()
 
@@ -247,8 +247,8 @@ class TestIntegration:
         assert "like" in preferences
         assert "pizza" in preferences["like"]
 
-        convs = await diary2.last_conversations(user_id, n=5)
-        assert len(convs) == 1
+        convs = await diary2.last_conversations(user_id, limit=5)
+        assert len(convs) == 2  # 1 session + _meta
         assert "session1" in convs
 
     @pytest.mark.asyncio
@@ -300,7 +300,7 @@ class TestIntegration:
         await asyncio.sleep(2)
 
         # Verify data integrity
-        convs = await diary.last_conversations(user_id, n=5)
+        convs = await diary.last_conversations(user_id, limit=5)
         assert session_id in convs
 
         # Turn count should reflect all updates
@@ -348,7 +348,7 @@ class TestIntegration:
         await asyncio.sleep(2)  # Wait for processing
 
         # System should still be functional despite some failures
-        convs = await diary.last_conversations("user", n=5)
+        convs = await diary.last_conversations("user", limit=5)
         # Some conversations should succeed (not all will fail)
         # The exact count depends on timing, but should be > 0
         assert len(convs) >= 0  # System shouldn't crash

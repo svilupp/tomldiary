@@ -1,0 +1,30 @@
+[_meta]
+version = "0.3"
+schema_name = "SimplePrefTable"
+
+[preferences.about.profession]
+text = "works as a chef"
+contexts = [
+    "career",
+]
+_count = 1
+_created = "2024-01-01T00:00:00Z"
+_updated = "2024-01-01T00:00:00Z"
+
+[preferences.about.location]
+text = "from Italy"
+contexts = [
+    "geography",
+]
+_count = 1
+_created = "2024-01-01T00:00:00Z"
+_updated = "2024-01-01T00:00:00Z"
+
+[preferences.like.coffee]
+text = "coffee lover"
+contexts = [
+    "beverage",
+]
+_count = 1
+_created = "2024-01-01T00:00:00Z"
+_updated = "2024-01-01T00:00:00Z"

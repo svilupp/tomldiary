@@ -83,7 +83,7 @@ class TestMetaInfo:
         """Test MetaInfo creation."""
         meta = MetaInfo(schema_name="TestSchema")
 
-        assert meta.version == "0.2"
+        assert meta.version == "0.3"
         assert meta.schema_name == "TestSchema"
 
     def test_toml_serialization(self):
@@ -91,7 +91,7 @@ class TestMetaInfo:
         meta = MetaInfo(schema_name="MyPrefTable")
         data = meta.model_dump()
 
-        assert data["version"] == "0.2"
+        assert data["version"] == "0.3"
         assert data["schema_name"] == "MyPrefTable"
 
 
@@ -154,11 +154,13 @@ class TestMemoryDeps:
         deps = MemoryDeps(
             prefs={},
             convs={
-                "session1": {
-                    "_created": "2024-01-01T00:00:00Z",
-                    "_turns": 5,
-                    "summary": "Chat about food preferences",
-                    "keywords": ["food", "pizza", "coffee"],
+                "conversations": {
+                    "session1": {
+                        "_created": "2024-01-01T00:00:00Z",
+                        "_turns": 5,
+                        "summary": "Chat about food preferences",
+                        "keywords": ["food", "pizza", "coffee"],
+                    }
                 }
             },
             allowed_cats=[],

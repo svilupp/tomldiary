@@ -65,7 +65,7 @@ await diary.update_memory(
 
 ```toml
 [_meta]
-version = "0.2"
+version = "0.3"
 schema_name = "MyPrefTable"
 
 [allergies.walnuts]
@@ -79,10 +79,10 @@ _updated = "2024-01-01T00:00:00Z"
 ### Conversations File (`alice_conversations.toml`)
 ```toml
 [_meta]
-version = "0.2"
+version = "0.3"
 schema_name = "MyPrefTable"
 
-[chat_123]
+[conversations.chat_123]
 _created = "2024-01-01T00:00:00Z"
 _turns = 5
 summary = "Discussed food preferences and dietary restrictions"
@@ -149,7 +149,7 @@ writer = MemoryWriter(
 Main class for memory operations:
 
 - `preferences(user_id)`: Get user preferences as TOML string
-- `last_conversations(user_id, n)`: Get last N conversation summaries
+- `last_conversations(user_id, limit)`: Get last N conversation summaries
 - `ensure_session(user_id, session_id)`: Create session if needed
 - `update_memory(user_id, session_id, user_msg, assistant_msg)`: Process and store memory
 

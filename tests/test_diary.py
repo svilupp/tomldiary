@@ -79,7 +79,7 @@ class TestDiary:
         assert is_new is True
 
         # Check session exists
-        convs = await diary.last_conversations(user_id, n=10)
+        convs = await diary.last_conversations(user_id, limit=10)
         assert session_id in convs
         assert convs[session_id]["_turns"] == 0
 
@@ -107,11 +107,14 @@ class TestDiary:
             await diary.ensure_session(user_id, f"session_{i}")
 
         # Should only have 5 sessions (oldest removed)
-        convs = await diary.last_conversations(user_id, n=10)
-        assert len(convs) == 5
+        convs = await diary.last_conversations(user_id, limit=10)
+        assert len(convs) == 6  # 5 sessions + _meta
+
+        # Filter out metadata for session count check
+        session_ids = {k for k in convs if k != "_meta"}
+        assert len(session_ids) == 5
 
         # Should have the most recent ones
-        session_ids = set(convs.keys())
         assert "session_6" in session_ids
         assert "session_5" in session_ids
         assert "session_0" not in session_ids  # Oldest should be removed
@@ -150,7 +153,7 @@ class TestDiary:
         assert isinstance(deps, MemoryDeps)
 
         # Check session was updated
-        convs = await diary.last_conversations(user_id, n=1)
+        convs = await diary.last_conversations(user_id, limit=1)
         assert session_id in convs
         assert convs[session_id]["_turns"] == 1
 
@@ -232,11 +235,12 @@ class TestDiary:
             await diary.ensure_session(user_id, f"session_{i}")
 
         # Get last 3
-        recent = await diary.last_conversations(user_id, n=3)
-        assert len(recent) == 3
+        recent = await diary.last_conversations(user_id, limit=3)
+        assert len(recent) == 4  # 3 sessions + _meta
 
         # Should be most recent (sessions are sorted by creation time)
-        session_ids = list(recent.keys())
+        session_ids = [k for k in recent if k != "_meta"]
+        assert len(session_ids) == 3
         # Most recent should be session_4, session_3, session_2
         assert "session_4" in session_ids
         assert "session_3" in session_ids
@@ -262,7 +266,7 @@ class TestDiary:
         assert len(mock_agent.run_calls) == 5
 
         # Check final turn count
-        convs = await diary.last_conversations(user_id, n=1)
+        convs = await diary.last_conversations(user_id, limit=1)
         # Turn count should be at least 1 (race conditions may affect exact count)
         assert convs[session_id]["_turns"] >= 1
         assert convs[session_id]["_turns"] <= 5  # But not more than submitted
@@ -277,10 +281,65 @@ class TestDiary:
         assert prefs == ""
 
         # Should handle missing conversations gracefully
-        convs = await diary.last_conversations(user_id, n=5)
-        assert len(convs) == 0
+        convs = await diary.last_conversations(user_id, limit=5)
+        assert len(convs) == 1  # Just _meta
+        assert "_meta" in convs
 
         # build_deps should work with empty data
         deps = await diary.build_deps(user_id, "new_session")
         assert isinstance(deps, MemoryDeps)
         assert len(deps.prefs.get("preferences", {})) == 0
+
+    @pytest.mark.asyncio
+    async def test_migration_v02_to_v03(self, diary, backend):
+        """Test automatic migration from v0.2 to v0.3 format."""
+        user_id = "migration_test_user"
+
+        # Manually create old v0.2 format conversation file
+        old_format = {
+            "_meta": {"version": "0.2", "schema_name": "MyPrefTable"},
+            "session_1": {
+                "_created": "2024-01-01T00:00:00Z",
+                "_updated": "2024-01-01T00:00:00Z",
+                "_turns": 3,
+                "summary": "Test migration conversation",
+                "keywords": ["test", "migration"],
+            },
+            "session_2": {
+                "_created": "2024-01-02T00:00:00Z",
+                "_updated": "2024-01-02T00:00:00Z",
+                "_turns": 1,
+                "summary": "Another test conversation",
+                "keywords": ["another", "test"],
+            },
+        }
+
+        import tomli_w
+
+        await backend.save(user_id, "conversations", tomli_w.dumps(old_format))
+
+        # Load conversations through diary (should trigger migration)
+        convs = await diary._load_convs(user_id)
+
+        # Verify migration happened
+        assert convs["_meta"]["version"] == "0.3"
+        assert "conversations" in convs
+        assert "session_1" in convs["conversations"]
+        assert "session_2" in convs["conversations"]
+
+        # Verify data was preserved
+        assert convs["conversations"]["session_1"]["_turns"] == 3
+        assert convs["conversations"]["session_1"]["summary"] == "Test migration conversation"
+        assert convs["conversations"]["session_2"]["_turns"] == 1
+
+        # Verify migrated file was saved back
+        raw_data = await backend.load(user_id, "conversations")
+        migrated_data = tomllib.loads(raw_data)
+        assert migrated_data["_meta"]["version"] == "0.3"
+        assert "conversations" in migrated_data
+
+        # Test that last_conversations works with migrated data
+        recent = await diary.last_conversations(user_id, limit=5)
+        assert "session_1" in recent
+        assert "session_2" in recent
+        assert len(recent) == 3  # 2 sessions + _meta
