@@ -33,7 +33,7 @@ format:
 
 # Run tests
 test:
-	pytest
+	uv run -m pytest --cov=tomldiary --cov-report=term-missing
 
 # CI target - run lint and test
 ci: lint test

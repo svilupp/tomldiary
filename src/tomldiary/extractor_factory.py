@@ -5,6 +5,7 @@ import re
 import textwrap
 import tomllib
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -17,7 +18,7 @@ from textprompts import Prompt
 from . import tools
 from .models import MemoryDeps
 
-REQUIRED_PLACEHOLDERS = {"categories_doc"}
+REQUIRED_PLACEHOLDERS = {"categories_doc", "current_time"}
 
 
 def _warn_missing_placeholders(prompt_text: str, required: Sequence[str]) -> None:
@@ -65,7 +66,14 @@ def extractor_agent(
         prompt_obj = Prompt.from_path(Path(prompt_template), meta="allow")
 
     extractor_prompt_check(prompt_obj)
-    system_prompt = prompt_obj.prompt.format(categories_doc=docs)
+
+    # Get current time rounded to nearest 15 minutes (to not break prompt caching)
+    now = datetime.now()
+    minutes = (now.minute // 15) * 15
+    rounded_time = now.replace(minute=minutes, second=0, microsecond=0)
+    current_time = rounded_time.strftime("%Y-%m-%d %H:%M")
+
+    system_prompt = prompt_obj.prompt.format(categories_doc=docs, current_time=current_time)
 
     # 2. assemble tools with updated names
     tool_list = [
