@@ -3,7 +3,7 @@ tomldiary - A TOML-based memory system for tracking user preferences and convers
 """
 
 from .diary import Diary, TOMLDiary
-from .extractor_factory import build_extractor
+from .extractor_factory import build_extractor, extractor_agent, extractor_prompt_check
 from .models import ConversationItem, MemoryDeps, MetaInfo, PreferenceItem
 from .pretty_print import (
     ConversationsPrinter,
@@ -21,6 +21,8 @@ __all__ = [
     "MemoryDeps",
     "MetaInfo",
     "build_extractor",
+    "extractor_agent",
+    "extractor_prompt_check",
     "MemoryWriter",
     "shutdown_all_background_tasks",
     "PreferencesPrinter",

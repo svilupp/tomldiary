@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated cooking show example to use direct `diary.update_memory()` calls for reliable memory persistence
 
 
+## [0.0.4] - 2025-08-06
+
+### Added
+- `extractor_agent` with configurable retries and env-driven default model
+- `extractor_prompt_check` helper and example usage
+
+### Changed
+- Documentation and examples updated to reference `extractor_agent`
+
+
 
 ## [0.0.1] - 2025-07-20
 

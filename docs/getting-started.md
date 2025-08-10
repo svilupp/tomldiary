@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from typing import Dict
 from tomldiary import (
     Diary,
-    MemoryWriter, 
+    MemoryWriter,
     PreferenceItem,
     shutdown_all_background_tasks
 )
@@ -45,15 +45,15 @@ class SimplePrefTable(BaseModel):
     dislike: Dict[str, PreferenceItem] = {}
 
 async def main():
-    # Step 2: Create the diary
+    # Step 2: Create the diary (uses extractor_agent by default)
     diary = Diary(
         backend=LocalBackend(Path("./my_memories")),
         pref_table_cls=SimplePrefTable
     )
-    
+
     # Step 3: Create the writer
     writer = MemoryWriter(diary)
-    
+
     # Step 4: Process some conversations, requires LLM call
     await writer.submit(
         user_id="user123",
@@ -61,15 +61,15 @@ async def main():
         user_msg="I love chocolate ice cream!",
         assistant_msg="I'll remember you love chocolate ice cream."
     )
-    
+
     # Wait a bit for processing
     await asyncio.sleep(1)
-    
+
     # Step 5: Read the memories
     prefs = await diary.preferences("user123")
     print("User preferences:")
     print(prefs)
-    
+
     # Step 6: Clean up
     await writer.close()
     await shutdown_all_background_tasks()

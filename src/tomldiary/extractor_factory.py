@@ -1,22 +1,55 @@
 # pragma: no cover
 import inspect
+import os
+import re
 import textwrap
 import tomllib
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
+import httpx
 import tomli_w
-from pydantic_ai import Agent, ModelRetry, RunContext, Tool
+from pydantic import ValidationError
+from pydantic_ai import Agent, ModelHTTPError, ModelRetry, RunContext, Tool
+from pydantic_ai.models.fallback import FallbackModel
 from textprompts import Prompt
 
 from . import tools
 from .models import MemoryDeps
 from .utils import extract_categories_from_schema
 
+REQUIRED_PLACEHOLDERS = {"categories_doc"}
 
-def build_extractor(
+
+def _warn_missing_placeholders(prompt_text: str, required: Sequence[str]) -> None:
+    """Check placeholders in the prompt and warn if required ones are missing."""
+
+    found = set(re.findall(r"{(.*?)}", prompt_text))
+    missing = set(required) - found
+    if missing:  # pragma: no cover - trivial warning
+        print(
+            "⚠️  Missing placeholder(s) in prompt: "
+            + ", ".join(sorted(missing))
+            + ". This may hurt extraction results."
+        )
+
+
+def extractor_prompt_check(prompt: str | Path | Prompt) -> None:
+    """Public helper to validate custom prompt placeholders."""
+
+    if isinstance(prompt, Prompt):
+        text = prompt.prompt
+    else:
+        text = Prompt.from_path(Path(prompt), meta="allow").prompt
+    _warn_missing_placeholders(text, REQUIRED_PLACEHOLDERS)
+
+
+def extractor_agent(
     pref_table_cls,
-    model_name="openai:gpt-4.1-mini",
-    prompt_template_path=None,
+    model_name: str | None = None,
+    prompt_template: str | Path | Prompt | None = None,
+    fallback_retries: int = 3,
+    fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None,
 ):  # pragma: no cover - CLI helper
     """Build an extraction agent for the given preference table class."""
 
@@ -24,14 +57,17 @@ def build_extractor(
     cats = extract_categories_from_schema(pref_table_cls)
     docs = textwrap.dedent(inspect.getdoc(pref_table_cls) or "")
 
-    # Use default prompt template path if not provided
-    if prompt_template_path is None:
-        prompt_template_path = Path(__file__).parent / "prompts" / "extractor_prompt.txt"
+    # Use default prompt template if not provided
+    if prompt_template is None:
+        prompt_template = Path(__file__).parent / "prompts" / "extractor_prompt.txt"
 
-    prompt_template = Prompt.from_path(prompt_template_path, meta="allow").prompt
-    system_prompt = prompt_template.format(
-        categories_doc=docs,
-    )
+    if isinstance(prompt_template, Prompt):
+        prompt_obj = prompt_template
+    else:
+        prompt_obj = Prompt.from_path(Path(prompt_template), meta="allow")
+
+    extractor_prompt_check(prompt_obj)
+    system_prompt = prompt_obj.prompt.format(categories_doc=docs)
 
     # 2. assemble tools with updated names
     tool_list = [
@@ -43,9 +79,34 @@ def build_extractor(
         Tool(tools.update_conversation_summary, takes_ctx=True),
     ]
 
-    # 3. create agent
+    # 3. build model with fallback retries
+    if fallback_on is None:
+        fallback_on = (ModelHTTPError, ValidationError, httpx.TimeoutException)
+
+    if (
+        isinstance(fallback_on, Sequence)
+        and not isinstance(fallback_on, str)
+        and not callable(fallback_on)
+    ):
+        fallback_on_param: Callable[[Exception], bool] | Sequence[type[Exception]] = tuple(
+            fallback_on
+        )
+    else:
+        fallback_on_param = fallback_on
+
+    model_name = model_name or os.getenv("EXTRACTOR_MODEL", "gpt-5-mini")
+    fallback_model = (
+        FallbackModel(
+            model_name,
+            *[model_name] * fallback_retries,
+            fallback_on=fallback_on_param,
+        )
+        if fallback_retries > 0
+        else model_name
+    )
+
     agent = Agent(
-        model_name,
+        fallback_model,
         deps_type=MemoryDeps,
         tools=tool_list,
         system_prompt=system_prompt,
@@ -67,3 +128,17 @@ def build_extractor(
         return output
 
     return agent, cats
+
+
+def build_extractor(
+    pref_table_cls,
+    model_name: str | None = None,
+    prompt_template_path: str | Path | Prompt | None = None,
+):  # pragma: no cover - legacy alias
+    """Backward compatible alias for :func:`extractor_agent`."""
+
+    return extractor_agent(
+        pref_table_cls,
+        model_name=model_name,
+        prompt_template=prompt_template_path,
+    )

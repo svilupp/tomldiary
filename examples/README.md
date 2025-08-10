@@ -20,7 +20,7 @@ This folder contains examples demonstrating the TOML Diary memory system:
 Educational demonstration of core memory functionality.
 
 **Perfect for learning:**
-- Self-contained with no external dependencies  
+- Self-contained with no external dependencies
 - Simple 3-category preference schema (like/dislike/about)
 - Clear step-by-step process explanation
 - Minimal conversations showing basic extraction
@@ -28,7 +28,7 @@ Educational demonstration of core memory functionality.
 
 **Features:**
 - Basic text-based preference extraction
-- Multi-user memory isolation 
+- Multi-user memory isolation
 - TOML file generation and structure
 - Conversation logging with turn counts
 
@@ -56,9 +56,19 @@ cd examples
 python example_cooking_show.py
 ```
 
+### 🛠️ Custom Extractor (`extractor_agent_example.py`)
+Demonstrates using `extractor_agent`, manual `Agent` setup, and `extractor_prompt_check`
+with explicit prompt paths.
+
+**Run:**
+```bash
+cd examples
+python extractor_agent_example.py
+```
+
 ## Preference Schema
 
-Both examples use the comprehensive `CulinaryPrefTable` with detailed AI instructions for each category:
+These examples use the comprehensive `CulinaryPrefTable` with detailed AI instructions for each category:
 
 ### Categories with AI Extraction Guidelines
 
@@ -99,7 +109,7 @@ Both examples use the comprehensive `CulinaryPrefTable` with detailed AI instruc
 - **Multi-user support**: Isolated memory per user
 - **Self-contained**: No external APIs or complex dependencies
 
-### 🍳 AI Cooking Show (Advanced)  
+### 🍳 AI Cooking Show (Advanced)
 - **AI Integration**: Pydantic-AI with OpenAI for natural conversations
 - **Dynamic agents**: Host and chef personalities with distinct behaviors
 - **Complex extraction**: Real-time preference extraction from organic dialogue
@@ -117,7 +127,7 @@ Both examples use the comprehensive `CulinaryPrefTable` with detailed AI instruc
 
 Each example creates:
 - Individual TOML files for each chef's preferences
-- Conversation logs with turn counts  
+- Conversation logs with turn counts
 - Formatted display of extracted memories
 - Sample TOML content for inspection
 
