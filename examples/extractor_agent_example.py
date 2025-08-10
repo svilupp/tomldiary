@@ -3,14 +3,14 @@
 
 from pathlib import Path
 
+import dotenv
+from culinary_prefs import CulinaryPrefTable
 from pydantic_ai import Agent
 from textprompts import Prompt
+
 from tomldiary import Diary, extractor_agent, extractor_prompt_check
 from tomldiary.backends import LocalBackend
 
-from culinary_prefs import CulinaryPrefTable
-
-import dotenv
 dotenv.load_dotenv()
 
 

@@ -4,15 +4,15 @@
 Simplified demo showing preference learning for restaurant bookings using tomldiary's built-in methods.
 """
 
-import os
 import asyncio
-from typing import Dict
-from pathlib import Path
-from pydantic import BaseModel, Field
-from dotenv import load_dotenv
 import json
+import os
 from dataclasses import dataclass
+from pathlib import Path
+
 import logfire
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
@@ -118,14 +118,14 @@ def book_restaurant(ctx: RunContext, restaurant_id: str, date: str, time: str, p
         if rest["id"] == restaurant_id:
             restaurant = rest
             break
-    
+
     if not restaurant:
         return f"❌ Restaurant with ID {restaurant_id} not found."
-    
+
     # Check if time is available
     if time not in restaurant["available_times"]:
         return f"❌ {time} is not available at {restaurant['name']}. Available times: {', '.join(restaurant['available_times'])}"
-    
+
     # Create booking
     booking_id = f"booking_{len(MOCK_BOOKINGS) + 1}"
     booking = {
@@ -138,9 +138,9 @@ def book_restaurant(ctx: RunContext, restaurant_id: str, date: str, time: str, p
         "special_requests": special_requests,
         "status": "confirmed"
     }
-    
+
     MOCK_BOOKINGS.append(booking)
-    
+
     return f"✅ Booking confirmed! Reservation #{booking_id} at {restaurant['name']} for {party_size} people on {date} at {time}. {f'Special requests: {special_requests}' if special_requests else ''}"
 
 
@@ -151,10 +151,10 @@ def check_availability(ctx: RunContext, restaurant_id: str, date: str) -> str:
         if rest["id"] == restaurant_id:
             restaurant = rest
             break
-    
+
     if not restaurant:
         return f"❌ Restaurant with ID {restaurant_id} not found."
-    
+
     return f"📅 {restaurant['name']} availability for {date}:\n" + json.dumps({
         "available_times": restaurant["available_times"],
         "table_types": restaurant["table_types"],
@@ -168,44 +168,44 @@ class UserDiningPreferences(BaseModel):
     valuable for restaurant recommendations and booking assistance.
     We capture dining preferences, restrictions, occasions, and booking patterns
     to enhance restaurant recommendations and booking experiences.
-    
+
     Extract dining preferences from conversations:
     - likes: Cuisines, restaurants, dining styles, atmospheres, occasions
-    - dislikes: Foods, restaurant types, atmospheres, service styles to avoid  
+    - dislikes: Foods, restaurant types, atmospheres, service styles to avoid
     - dietary_restrictions: Allergies, dietary choices (vegan, keto, etc.), health needs
     - booking_patterns: Preferred times, party sizes, special occasions, seating preferences
     - about_the_user: Lifestyle factors relevant for dining and booking choices
-    
+
     Be specific with context like preference: "Italian restaurants" context: "for romantic dates".
     Extract implicit preferences - business person = quiet restaurants, family = kid-friendly places.
     """
-    likes: Dict[str, PreferenceItem] = Field(
+    likes: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Cuisines, restaurants, dining styles, and atmospheres the user enjoys. "
         "Context-specific preferences (date nights, business meals, family dining, celebrations). "
         "Examples: 'loves Italian restaurants for dates', 'enjoys sushi bars for lunch meetings', "
         "'prefers cozy cafes for casual dining', 'likes outdoor patios in summer'"
     )
-    dislikes: Dict[str, PreferenceItem] = Field(
+    dislikes: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Foods, restaurant types, atmospheres, and service styles the user avoids. "
         "Context-specific dislikes and dining aversions. "
         "Examples: 'hates noisy restaurants', 'avoids chain restaurants', 'dislikes formal dining', "
         "'uncomfortable with sushi bars', 'never books weekend brunch'"
     )
-    dietary_restrictions: Dict[str, PreferenceItem] = Field(
+    dietary_restrictions: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Allergies, dietary choices, and health-related food restrictions. "
         "Examples: 'allergic to shellfish', 'follows vegan diet', 'gluten intolerant', "
         "'keto lifestyle', 'lactose sensitive', 'avoiding alcohol'"
     )
-    booking_patterns: Dict[str, PreferenceItem] = Field(
+    booking_patterns: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Preferred booking times, party sizes, occasions, and seating preferences. "
         "Examples: 'prefers 7:30 PM reservations', 'usually books for 2 people', "
         "'likes window seats', 'books private booths for business', 'prefers early dinner with kids'"
     )
-    about_the_user: Dict[str, PreferenceItem] = Field(
+    about_the_user: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Lifestyle factors and personal details relevant to dining choices. "
         "Examples: 'busy executive - needs quick service', 'celebrates anniversaries monthly', "
@@ -227,14 +227,14 @@ booking_agent = Agent(
     ),
     deps_type=BookingContext,
     tools=[search_restaurants, book_restaurant, check_availability],
-    system_prompt="""You are BookingBot, a restaurant reservation specialist and dining concierge. 
+    system_prompt="""You are BookingBot, a restaurant reservation specialist and dining concierge.
     You help users find and book restaurants that perfectly match their preferences, occasions, and needs.
-    
+
     ### Your Role
     - Restaurant Booking Expert: Handle reservations, check availability, and manage special requests
     - Dining Concierge: Provide personalized restaurant recommendations based on learned preferences
     - Communication Style: Professional yet friendly, like a knowledgeable concierge
-    
+
     You focus on:
     - Understanding user's dining preferences, dietary restrictions, and occasion needs
     - Learning their booking patterns (preferred times, party sizes, seating preferences)
@@ -242,7 +242,7 @@ booking_agent = Agent(
     - Understanding what restaurants/foods they dislike or need to avoid
     - Gathering context about special occasions, business needs, and lifestyle factors
     - Making actual restaurant bookings when requested
-    
+
     Always ask for specific details needed for bookings: date, time, party size, and any special requests.
     Be enthusiastic about helping them find the perfect dining experience!"""
 )
@@ -251,19 +251,19 @@ booking_agent = Agent(
 async def add_booking_memory(ctx: RunContext[BookingContext]) -> str:
     """Add the user's existing dining and booking memory context to the system prompt."""
     memory_parts = []
-    
+
     # Get formatted preferences using new pretty method
     formatted_prefs = await ctx.deps.diary.pretty_preferences(ctx.deps.user_id)
     if formatted_prefs != "No preferences found for user.":
         memory_parts.append("Your knowledge about this user's dining preferences:")
         memory_parts.append(formatted_prefs)
-    
+
     # Get formatted conversations using new pretty method
     formatted_convs = await ctx.deps.diary.pretty_conversations(ctx.deps.user_id, limit=3)
     if formatted_convs != "No conversations found for user.":
         memory_parts.append("Recent conversation highlights:")
         memory_parts.append(formatted_convs)
-    
+
     return "\n\n".join(memory_parts) if memory_parts else ""
 
 
@@ -271,16 +271,16 @@ async def booking_conversation(user_id: str, session_id: str, message: str, diar
     """Run a booking conversation with memory context."""
     print(f"\n🍽️ Booking Session: {session_id}")
     print("-" * 40)
-    
+
     # Create context
     context = BookingContext(user_id=user_id, session_id=session_id, diary=diary)
-    
+
     # Run the conversation with memory-aware system prompt
     result = await booking_agent.run(message, deps=context, message_history=history or [])
-    
+
     print(f"👤 User: {message}")
     print(f"🤖 Booking AI: {result.output}")
-    
+
     # Update memory after every conversation
     await diary.update_memory(
         user_id=user_id,
@@ -288,7 +288,7 @@ async def booking_conversation(user_id: str, session_id: str, message: str, diar
         user_msg=message,
         assistant_msg=result.output
     )
-    
+
     return result
 
 
@@ -296,7 +296,7 @@ async def booking_demo():
     """Run the simplified restaurant booking memory demo."""
     print("🍽️ Restaurant Booking Agent Demo")
     print("=" * 50)
-    
+
     # Setup
     backend = LocalBackend(Path("./memories"))
     diary = Diary(
@@ -305,9 +305,9 @@ async def booking_demo():
         max_prefs_per_category=20,
         max_conversations=10
     )
-    
+
     user_id = "demo_user"
-    
+
     # Booking conversations that reveal dining preferences and booking patterns
     conversations = [
         ("anniversary_dinner", [
@@ -327,25 +327,25 @@ async def booking_demo():
             "That sounds great! Can you book Mediterranean Breeze for Sunday at 6:00 PM for 8 people? Please mention it's for a birthday celebration."
         ])
     ]
-    
+
     print("\n📅 Starting booking conversations...\n")
-    
+
     # Run conversations
     for session_id, messages in conversations:
         result = None
         for message in messages:
             result = await booking_conversation(
-                user_id=user_id, 
-                session_id=session_id, 
-                message=message, 
+                user_id=user_id,
+                session_id=session_id,
+                message=message,
                 diary=diary,
                 history=result.all_messages() if result else None
             )
         await asyncio.sleep(0.5)  # Brief pause between sessions
-    
-    print(f"\n📚 Dining Memory Profile:")
+
+    print("\n📚 Dining Memory Profile:")
     print("=" * 50)
-    
+
     # Show preferences using new pretty method
     formatted_prefs = await diary.pretty_preferences(user_id)
     if formatted_prefs != "No preferences found for user.":
@@ -353,23 +353,23 @@ async def booking_demo():
         for line in formatted_prefs.split('\n'):
             if line.strip():
                 print(f"  {line}")
-    
+
     # Show conversation summaries using new pretty method
     formatted_convs = await diary.pretty_conversations(user_id, limit=5)
     if formatted_convs != "No conversations found for user.":
-        print(f"\n💬 Recent Booking Sessions:")
+        print("\n💬 Recent Booking Sessions:")
         for line in formatted_convs.split('\n'):
             if line.strip():
                 print(f"  {line}")
-    
+
     # Show successful bookings
     if MOCK_BOOKINGS:
-        print(f"\n📋 Confirmed Reservations:")
+        print("\n📋 Confirmed Reservations:")
         for booking in MOCK_BOOKINGS:
             print(f"  ✅ {booking['restaurant_name']} - {booking['date']} at {booking['time']} for {booking['party_size']} people")
-    
-    print(f"\n✨ Dining memories and bookings saved successfully!")
-    print(f"📁 Check the './memories' directory for TOML files")
+
+    print("\n✨ Dining memories and bookings saved successfully!")
+    print("📁 Check the './memories' directory for TOML files")
 
 
 if __name__ == "__main__":

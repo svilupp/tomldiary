@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `fallback_on` and `fallback_retries` parameters to `extractor_agent` to support auto-retry on common errors
 - Added `extractor_prompt_check` utility to validate custom extractor prompts (can be provided to `extractor_agent(..., prompt_template=...)` parameter)
+- Default model loaded from `EXTRACTOR_MODEL` env when provided
 
 ## [0.0.3] - 2025-08-06
 
