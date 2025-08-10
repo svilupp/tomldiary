@@ -7,7 +7,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
 from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 
@@ -79,7 +78,7 @@ class TestIntegration:
         diary = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
-            agent=(agent, ["like", "dislike", "allergy", "habit", "about"]),
+            agent=agent,
             max_prefs_per_category=20,
             max_conversations=10,
         )
@@ -195,7 +194,7 @@ class TestIntegration:
         diary = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
-            agent=(agent, ["like", "dislike", "allergy", "habit", "about"]),
+            agent=agent,
             max_prefs_per_category=2,  # Very low
             max_conversations=2,  # Very low
         )
@@ -233,7 +232,7 @@ class TestIntegration:
         diary2 = Diary(
             backend=diary1.backend,  # Same backend
             pref_table_cls=MyPrefTable,
-            agent=(MockExtractionAgent(), ["like", "dislike", "allergy", "habit", "about"]),
+            agent=MockExtractionAgent(),
             max_prefs_per_category=20,
             max_conversations=10,
         )
@@ -320,7 +319,6 @@ class TestIntegration:
     async def test_conversation_summary_persistence(self, temp_dir):
         """Test that conversation summary updates are actually saved to disk"""
         from pydantic import BaseModel
-
         from tomldiary.models import PreferenceItem
         from tomldiary.tools import update_conversation_summary
 
@@ -355,7 +353,7 @@ class TestIntegration:
                 await update_conversation_summary(ctx, summary, keywords)
 
         agent = SummaryUpdatingAgent()
-        diary = Diary(backend, TestPrefTable, agent=(agent, ["likes"]))
+        diary = Diary(backend, TestPrefTable, agent=agent)
 
         user_id = "test_user"
         session_id = "test_session"
@@ -414,7 +412,7 @@ class TestIntegration:
         diary = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
-            agent=(FlakyAgent(), ["like", "dislike", "allergy", "habit", "about"]),
+            agent=FlakyAgent(),
             max_prefs_per_category=20,
             max_conversations=10,
         )

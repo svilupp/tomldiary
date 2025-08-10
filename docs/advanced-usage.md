@@ -106,7 +106,7 @@ from pydantic_ai import Agent
 from tomldiary import extractor_agent
 
 # Start with the default agent
-agent, allowed_categories = extractor_agent(MyPrefTable)
+agent = extractor_agent(MyPrefTable)
 
 # Customize the agent
 agent = agent.with_system_prompt("""
@@ -119,7 +119,7 @@ Be conservative about what you store.
 diary = Diary(
     backend=backend,
     pref_table_cls=MyPrefTable,
-    agent=(agent, allowed_categories)
+    agent=agent
 )
 ```
 

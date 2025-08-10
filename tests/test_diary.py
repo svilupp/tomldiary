@@ -7,7 +7,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
 from tomldiary import Diary
 from tomldiary.backends.local import LocalBackend
 from tomldiary.models import MemoryDeps
@@ -63,7 +62,7 @@ class TestDiary:
         return Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
-            agent=(mock_agent, ["like", "dislike", "allergy", "habit", "about"]),
+            agent=mock_agent,
             max_prefs_per_category=10,
             max_conversations=5,
         )
@@ -164,7 +163,7 @@ class TestDiary:
         diary_low_limit = Diary(
             backend=backend,
             pref_table_cls=MyPrefTable,
-            agent=(MockAgent(), ["like", "dislike", "allergy", "habit", "about"]),
+            agent=MockAgent(),
             max_prefs_per_category=2,  # Very low
             max_conversations=5,
         )

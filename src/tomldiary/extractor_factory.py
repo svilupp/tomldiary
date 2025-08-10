@@ -16,7 +16,6 @@ from textprompts import Prompt
 
 from . import tools
 from .models import MemoryDeps
-from .utils import extract_categories_from_schema
 
 REQUIRED_PLACEHOLDERS = {"categories_doc"}
 
@@ -53,8 +52,7 @@ def extractor_agent(
 ):  # pragma: no cover - CLI helper
     """Build an extraction agent for the given preference table class."""
 
-    # 1. derive docs & use utility to get categories
-    cats = extract_categories_from_schema(pref_table_cls)
+    # 1. derive docs from preference table class docstring
     docs = textwrap.dedent(inspect.getdoc(pref_table_cls) or "")
 
     # Use default prompt template if not provided
@@ -94,7 +92,7 @@ def extractor_agent(
     else:
         fallback_on_param = fallback_on
 
-    model_name = model_name or os.getenv("EXTRACTOR_MODEL", "gpt-5-mini")
+    model_name = model_name or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")
     fallback_model = (
         FallbackModel(
             model_name,
@@ -127,7 +125,7 @@ def extractor_agent(
             raise ModelRetry(f"Conversation Summaries TOML invalid after edits: {e}") from e
         return output
 
-    return agent, cats
+    return agent
 
 
 def build_extractor(

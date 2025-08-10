@@ -18,16 +18,16 @@ def main() -> None:
     extractor_prompt_check(prompt_path)
 
     # Automatically build agent with fallback support
-    agent, allowed = extractor_agent(CulinaryPrefTable, prompt_template=prompt_path)
-    diary = Diary(LocalBackend(Path("memory_extractor")), CulinaryPrefTable, agent=(agent, allowed))
+    agent = extractor_agent(CulinaryPrefTable, prompt_template=prompt_path)
+    diary = Diary(LocalBackend(Path("memory_extractor")), CulinaryPrefTable, agent=agent)
 
     # Manual pydantic-ai Agent using textprompts directly
     prompt_obj = Prompt.from_path(prompt_path, meta="allow")
-    manual = Agent("gpt-5-mini", system_prompt=prompt_obj.prompt)
+    manual = Agent("openai:gpt-5-mini", system_prompt=prompt_obj.prompt)
     manual_diary = Diary(
         LocalBackend(Path("memory_manual")),
         CulinaryPrefTable,
-        agent=(manual, allowed),
+        agent=manual,
     )
 
     # Use diaries as needed... (omitted for brevity)

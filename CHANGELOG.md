@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.4] - 2025-08-06
 
 ### Added
-- `extractor_agent` with configurable retries and env-driven default model
+- `extractor_agent` with configurable retries and env-driven default model (default `openai:gpt-5-mini`)
 - `extractor_prompt_check` helper and example usage
 
 ### Changed

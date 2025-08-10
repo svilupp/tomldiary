@@ -16,17 +16,14 @@ class Diary:
     ):
         self.backend = backend
         self.pref_table_cls = pref_table_cls
-        # Build agent once during initialization
-        if agent:
-            # Handle tuple case from tests (agent, allowed_cats)
-            if isinstance(agent, tuple):
-                self.agent = agent[0]
-                self.allowed = agent[1]
-            else:
-                self.agent = agent
-                self.allowed = extract_categories_from_schema(pref_table_cls)
+        cats = extract_categories_from_schema(pref_table_cls)
+        if agent is None:
+            self.agent = build_extractor(pref_table_cls)
+        elif isinstance(agent, str):
+            self.agent = build_extractor(pref_table_cls, model_name=agent)
         else:
-            self.agent, self.allowed = build_extractor(pref_table_cls)
+            self.agent = agent
+        self.allowed = cats
         self.max_prefs_per_category = max_prefs_per_category
         self.max_conversations = max_conversations
         self.schema_name = pref_table_cls.__name__

@@ -22,8 +22,8 @@ class Diary:
 
 - `backend`: Storage backend instance (e.g., LocalBackend)
 - `pref_table_cls`: Pydantic model defining preference categories
-- `agent`: Optional custom extraction agent. If omitted, `extractor_agent()`
-  is used with the model name from `EXTRACTOR_MODEL` (default `gpt-5-mini`).
+- `agent`: Optional extraction agent or model name. If omitted, `extractor_agent()`
+  is used with the model name from `EXTRACTOR_MODEL` (default `openai:gpt-5-mini`).
 - `max_prefs_per_category`: Maximum preferences per category (default: 100)
 - `max_conversations`: Maximum conversation history (default: 100)
 
@@ -179,9 +179,9 @@ Update the summary and keywords for the current conversation session.
 ### `shutdown_all_background_tasks(timeout: float = 10.0)`
 Shutdown all background tasks gracefully.
 
-### `extractor_agent(pref_table_cls: Type[BaseModel], model_name: str | None = None, prompt_template: str | Path | Prompt | None = None, fallback_retries: int = 3, fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None) -> Tuple[Agent, List[str]]`
+### `extractor_agent(pref_table_cls: Type[BaseModel], model_name: str | None = None, prompt_template: str | Path | Prompt | None = None, fallback_retries: int = 3, fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None) -> Agent`
 Build the default extraction agent for a preference table. Uses `EXTRACTOR_MODEL`
-or `gpt-5-mini` for the model name. `build_extractor()` is a legacy alias.
+or `openai:gpt-5-mini` for the model name. `build_extractor()` is a legacy alias.
 
 ### `extractor_prompt_check(prompt: str | Path | Prompt) -> None`
 Validate a custom extractor prompt and warn about missing placeholders.
