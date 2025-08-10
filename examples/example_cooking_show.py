@@ -55,19 +55,19 @@ async def add_chef_memory(ctx: RunContext[CookingShowContext]) -> str:
     """Add the chef's existing memory context to the system prompt."""
     # Use diary's built-in pretty printing methods
     memory_parts = []
-    
+
     # Get formatted preferences
     formatted_prefs = await ctx.deps.diary.pretty_preferences(ctx.deps.chef_name)
     if formatted_prefs != "No preferences found for user.":
         memory_parts.append("Your existing preferences:")
         memory_parts.append(formatted_prefs)
-    
+
     # Get formatted conversations
     formatted_convs = await ctx.deps.diary.pretty_conversations(ctx.deps.chef_name, limit=3)
     if formatted_convs != "No conversations found for user.":
         memory_parts.append("Recent conversation highlights:")
         memory_parts.append(formatted_convs)
-    
+
     return "\n\n".join(memory_parts) if memory_parts else ""
 
 
@@ -81,28 +81,28 @@ def add_chef_personality(ctx: RunContext[CookingShowContext]) -> str:
 
 async def chef_interview(chef_name: str, chef_personality: str, episodes: list[tuple[str, str]], diary: Diary):
     """Conduct an interview with a celebrity chef using AI agents"""
-    
+
     for episode, topic in episodes:
         print(f"\n📺 {chef_name} - Episode: {episode}")
         print("-" * 40)
-        
+
         # Create context with personality included
         context = CookingShowContext(chef_name, episode, diary, chef_personality)
-        
+
         # Host introduces the topic
         host_intro = await host_agent.run(
             f"Welcome chef! Today let's talk about {topic}. What are your thoughts?",
             deps=context
         )
         print(f"🎤 Host: {host_intro.output}")
-        
+
         # Chef responds (system prompt will dynamically include memory and personality)
         chef_response = await chef_agent.run(
             host_intro.output,
             deps=context
         )
         print(f"👨‍🍳 {chef_name}: {chef_response.output}")
-        
+
         # Update memory using direct diary.update_memory() call
         await diary.update_memory(
             user_id=chef_name,
@@ -110,7 +110,7 @@ async def chef_interview(chef_name: str, chef_personality: str, episodes: list[t
             user_msg=host_intro.output,
             assistant_msg=chef_response.output
         )
-        
+
         # Continue conversation with follow-up
         host_followup = await host_agent.run(
             f"That's fascinating! Can you tell me more about your preferences regarding {topic}?",
@@ -118,14 +118,14 @@ async def chef_interview(chef_name: str, chef_personality: str, episodes: list[t
             message_history=host_intro.new_messages()
         )
         print(f"🎤 Host: {host_followup.output}")
-        
+
         chef_detail = await chef_agent.run(
             host_followup.output,
             deps=context,
             message_history=chef_response.new_messages()
         )
         print(f"👨‍🍳 {chef_name}: {chef_detail.output}")
-        
+
         # Update memory for the follow-up exchange
         await diary.update_memory(
             user_id=chef_name,
@@ -139,18 +139,18 @@ async def cooking_show_demo():
     """Run the AI-powered cooking show memory demo."""
     print("🍳 Welcome to the AI Cooking Show Memory System!")
     print("=" * 50)
-    
+
     # Setup
     backend = LocalBackend(Path("memory_cooking_show"))
-    
-    # Create diary with build_extractor (proper approach)
+
+    # Create diary with extractor_agent (default behavior)
     diary = Diary(
         backend=backend,
         pref_table_cls=CulinaryPrefTable,
         max_prefs_per_category=10,
         max_conversations=5
     )
-    
+
     # Chef personalities and interview topics
     chefs = [
         ("chef_gordon", "A passionate British chef known for high standards and fiery temperament. Loves perfection.", [
@@ -166,24 +166,24 @@ async def cooking_show_demo():
             ("ingredient_focus", "working with fresh ingredients")
         ])
     ]
-    
+
     # Conduct interviews
     print("\n🎬 Starting celebrity chef interviews...\n")
-    
+
     for chef_name, personality, episodes in chefs:
         await chef_interview(chef_name, personality, episodes, diary)
         await asyncio.sleep(0.5)  # Brief pause between chefs
-    
+
     print("\n📚 Chef Memory Profiles:")
     print("=" * 50)
-    
+
     # Display the memories for each chef
     chefs = ["chef_gordon", "chef_julia", "chef_marco"]
-    
+
     for chef_name in chefs:
         print(f"\n👨‍🍳 {chef_name.upper().replace('_', ' ')}")
         print("-" * 30)
-        
+
         # Show preferences
         formatted_prefs = await diary.pretty_preferences(chef_name)
         if formatted_prefs != "No preferences found for user.":
@@ -191,7 +191,7 @@ async def cooking_show_demo():
             for line in formatted_prefs.split('\n'):
                 if line.strip():
                     print(f"  {line}")
-        
+
         # Show conversation summaries
         formatted_convs = await diary.pretty_conversations(chef_name, limit=3)
         if formatted_convs != "No conversations found for user.":
@@ -199,7 +199,7 @@ async def cooking_show_demo():
             for line in formatted_convs.split('\n'):
                 if line.strip():
                     print(f"  {line}")
-    
+
     # Show raw TOML for one chef
     print(f"\n📄 Sample TOML (chef_gordon preferences):")
     print("-" * 50)
@@ -208,7 +208,7 @@ async def cooking_show_demo():
         # Show first 800 characters
         preview = gordon_prefs[:800] + "..." if len(gordon_prefs) > 800 else gordon_prefs
         print(preview)
-    
+
     # Show conversation TOML
     print(f"\n📄 Sample TOML (chef_gordon conversations):")
     print("-" * 50)
@@ -217,7 +217,7 @@ async def cooking_show_demo():
         import tomli_w
         convs_preview = tomli_w.dumps(gordon_convs)[:600] + "..." if len(tomli_w.dumps(gordon_convs)) > 600 else tomli_w.dumps(gordon_convs)
         print(convs_preview)
-    
+
     print("\n✨ Cooking show memories saved successfully!")
     print(f"📁 Check the 'memory_cooking_show' directory for TOML files")
 
