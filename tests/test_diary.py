@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+
 from tomldiary import Diary
 from tomldiary.backends.local import LocalBackend
 from tomldiary.models import MemoryDeps

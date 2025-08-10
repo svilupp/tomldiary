@@ -8,7 +8,10 @@ from textprompts import Prompt
 from tomldiary import Diary, extractor_agent, extractor_prompt_check
 from tomldiary.backends import LocalBackend
 
-from examples.culinary_prefs import CulinaryPrefTable
+from culinary_prefs import CulinaryPrefTable
+
+import dotenv
+dotenv.load_dotenv()
 
 
 def main() -> None:
@@ -17,7 +20,7 @@ def main() -> None:
     # Check the prompt for required placeholders
     extractor_prompt_check(prompt_path)
 
-    # Automatically build agent with fallback support
+    # Automatically build agent with fallback support, we load the prompt via textprompts package
     agent = extractor_agent(CulinaryPrefTable, prompt_template=prompt_path)
     diary = Diary(LocalBackend(Path("memory_extractor")), CulinaryPrefTable, agent=agent)
 

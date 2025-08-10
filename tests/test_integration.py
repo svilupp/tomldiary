@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+
 from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 
@@ -319,6 +320,7 @@ class TestIntegration:
     async def test_conversation_summary_persistence(self, temp_dir):
         """Test that conversation summary updates are actually saved to disk"""
         from pydantic import BaseModel
+
         from tomldiary.models import PreferenceItem
         from tomldiary.tools import update_conversation_summary
 
