@@ -58,6 +58,14 @@ def test_prompt_check_warns(tmp_path, capsys):
     assert "current_time" in output
 
 
+def test_prompt_check_no_warning_when_valid(tmp_path, capsys):
+    prompt_path = tmp_path / "prompt.txt"
+    prompt_path.write_text("Valid prompt with {categories_doc} and {current_time}")
+    extractor_prompt_check(prompt_path)
+    output = capsys.readouterr().out
+    assert output == ""  # No warning should be printed
+
+
 def test_env_model_default(monkeypatch):
     monkeypatch.setenv("EXTRACTOR_MODEL", "test")
     agent = extractor_agent(MyPrefTable, fallback_retries=1)
@@ -72,6 +80,7 @@ def test_current_time_in_prompt():
     assert "{current_time}" not in system_prompt
     # Check that a date-time pattern exists in the prompt
     import re
+
     match = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:(\d{2})", system_prompt)
     assert match is not None
     # Check that minutes are rounded to 15-minute intervals
