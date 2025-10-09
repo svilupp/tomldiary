@@ -4,6 +4,12 @@ from datetime import UTC, datetime
 import tomli_w
 from pydantic_ai import format_as_xml
 
+from .compaction import (
+    CompactionConfig,
+    CompactionDeps,
+    CompactionStats,
+    compactor_agent,
+)
 from .extractor_factory import extractor_agent
 from .models import _MODEL_VERSION, ConversationItem, MemoryDeps
 from .pretty_print import ConversationsPrinter, PreferencesPrinter
@@ -12,7 +18,14 @@ from .utils import extract_categories_from_schema
 
 class Diary:
     def __init__(
-        self, backend, pref_table_cls, agent=None, max_prefs_per_category=100, max_conversations=100
+        self,
+        backend,
+        pref_table_cls,
+        agent=None,
+        max_prefs_per_category=100,
+        max_conversations=100,
+        compaction_config: CompactionConfig | None = None,
+        compactor=None,
     ):
         self.backend = backend
         self.pref_table_cls = pref_table_cls
@@ -27,6 +40,10 @@ class Diary:
         self.max_prefs_per_category = max_prefs_per_category
         self.max_conversations = max_conversations
         self.schema_name = pref_table_cls.__name__
+        self.compaction_config = compaction_config or CompactionConfig()
+        self.compactor = compactor
+        if self.compactor is None and self.compaction_config.enabled:
+            self.compactor = compactor_agent()
 
     # ------------ helpers ------------
     async def _load(self, user_id, kind):
@@ -121,6 +138,133 @@ class Diary:
                 )
                 preferences[category] = dict(sorted_items[: self.max_prefs_per_category])
 
+    def _preference_compaction_stats(self, prefs) -> CompactionStats:
+        preferences = prefs.get("preferences", {})
+        total_chars = len(tomli_w.dumps({"preferences": preferences}))
+        largest_block = 0
+        for items in preferences.values():
+            for data in items.values():
+                largest_block = max(largest_block, len(data.get("text", "")))
+        return CompactionStats(total_chars=total_chars, largest_block=largest_block)
+
+    def _conversation_compaction_stats(self, convs) -> CompactionStats:
+        conversations = convs.get("conversations", {})
+        total_chars = len(tomli_w.dumps({"conversations": conversations}))
+        largest_block = 0
+        for data in conversations.values():
+            largest_block = max(largest_block, len(data.get("summary", "")))
+        return CompactionStats(total_chars=total_chars, largest_block=largest_block)
+
+    def _parse_iso(self, value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:  # pragma: no cover - defensive guard
+            return None
+
+    async def _maybe_run_compactor(self, deps: MemoryDeps) -> bool:
+        cfg = self.compaction_config
+        now = datetime.now(UTC)
+
+        prefs_meta = deps.prefs.setdefault("_meta", {})
+        convs_meta = deps.convs.setdefault("_meta", {})
+        pref_comp_meta = prefs_meta.setdefault("compaction", {})
+        conv_comp_meta = convs_meta.setdefault("compaction", {})
+
+        conv_comp_meta["turns_since_compaction"] = conv_comp_meta.get(
+            "turns_since_compaction", 0
+        ) + 1
+        conv_comp_meta["total_turns"] = conv_comp_meta.get("total_turns", 0) + 1
+
+        pref_stats = self._preference_compaction_stats(deps.prefs)
+        conv_stats = self._conversation_compaction_stats(deps.convs)
+
+        pref_comp_meta.update(
+            {
+                "total_chars": pref_stats.total_chars,
+                "largest_block": pref_stats.largest_block,
+                "updated_at": now.isoformat(),
+            }
+        )
+        conv_comp_meta.update(
+            {
+                "total_chars": conv_stats.total_chars,
+                "largest_block": conv_stats.largest_block,
+                "updated_at": now.isoformat(),
+            }
+        )
+
+        if not cfg.enabled:
+            return False
+
+        pref_last_run = self._parse_iso(pref_comp_meta.get("last_run"))
+        conv_last_run = self._parse_iso(conv_comp_meta.get("last_run"))
+
+        run_prefs = cfg.should_run(
+            store="preferences",
+            stats=pref_stats,
+            last_run=pref_last_run,
+            turns_since_compaction=None,
+            now=now,
+        )
+
+        run_convs = cfg.should_run(
+            store="conversations",
+            stats=conv_stats,
+            last_run=conv_last_run,
+            turns_since_compaction=conv_comp_meta.get("turns_since_compaction"),
+            now=now,
+        )
+
+        if not (run_prefs or run_convs):
+            return False
+
+        if self.compactor is None:
+            return False
+
+        summary_lines = [
+            "Compaction trigger report:",
+            f"- Preferences targeted: {'yes' if run_prefs else 'no'}",
+            f"  total_chars={pref_stats.total_chars}, largest_block={pref_stats.largest_block}",
+            f"- Conversations targeted: {'yes' if run_convs else 'no'}",
+            f"  total_chars={conv_stats.total_chars}, largest_block={conv_stats.largest_block}, turns_since={conv_comp_meta.get('turns_since_compaction')}",
+        ]
+
+        compaction_deps = CompactionDeps(
+            deps.prefs,
+            deps.convs,
+            include_preferences=run_prefs,
+            include_conversations=run_convs,
+        )
+        await self.compactor.run("\n".join(summary_lines), deps=compaction_deps)
+
+        # Refresh stats after compaction edits
+        pref_stats = self._preference_compaction_stats(deps.prefs)
+        conv_stats = self._conversation_compaction_stats(deps.convs)
+
+        pref_comp_meta.update(
+            {
+                "total_chars": pref_stats.total_chars,
+                "largest_block": pref_stats.largest_block,
+                "updated_at": now.isoformat(),
+            }
+        )
+        if run_prefs:
+            pref_comp_meta["last_run"] = now.isoformat()
+        if run_convs:
+            conv_comp_meta["turns_since_compaction"] = 0
+            conv_comp_meta["last_run"] = now.isoformat()
+        conv_comp_meta.update(
+            {
+                "total_chars": conv_stats.total_chars,
+                "largest_block": conv_stats.largest_block,
+                "updated_at": now.isoformat(),
+            }
+        )
+
+        return True
+
     # ------------ main hook ------------
     async def update_memory(self, user_id, session_id, user_msg, assistant_msg):
         # Ensure session exists
@@ -164,6 +308,8 @@ class Diary:
 
         # Enforce limits before saving
         await self._enforce_preference_limits(deps.prefs)
+
+        await self._maybe_run_compactor(deps)
 
         # TOML already validated by output_validator
         # Backend handles path-level locking for concurrent access

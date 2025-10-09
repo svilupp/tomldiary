@@ -178,6 +178,37 @@ Main class for memory operations:
 - `ensure_session(user_id, session_id)`: Create session if needed
 - `update_memory(user_id, session_id, user_msg, assistant_msg)`: Process and store memory
 
+#### Automated compaction sweeps
+
+Use `CompactionConfig` to schedule background clean-up passes that trim redundant
+preferences or stale conversation summaries. The configuration persists progress inside
+`_meta.compaction` so counters survive restarts.
+
+```python
+from tomldiary.compaction import CompactionConfig
+
+compaction = CompactionConfig(
+    enabled=True,
+    total_char_threshold=4000,      # trigger when serialized store exceeds N characters
+    segment_char_threshold=600,     # or if any single block exceeds this size
+    user_turn_interval=25,          # also run every 25 user turns
+    cooldown_seconds=900,           # minimum gap between runs
+    compact_preferences=True,       # target preference store
+    compact_conversations=False,    # skip conversation summaries for this diary
+)
+
+diary = Diary(
+    backend=backend,
+    pref_table_cls=MyPrefTable,
+    agent=extractor,
+    compaction_config=compaction,
+)
+```
+
+The compactor uses dedicated tools (`list_preference_blocks`, `rewrite_*`, `delete_*`) and
+will loop through every block during a sweep. When disabled, the diary still records char
+counts and turn statistics so triggers fire immediately once compaction is re-enabled.
+
 ### MemoryWriter
 
 Background queue for non-blocking writes:

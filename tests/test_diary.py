@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tomldiary import Diary
+from tomldiary.compaction import CompactionConfig
 from tomldiary.backends.local import LocalBackend
 from tomldiary.models import MemoryDeps
 
@@ -34,6 +35,26 @@ class MockAgent:
                 "_created": "2024-01-01T00:00:00Z",
                 "_updated": "2024-01-01T00:00:00Z",
             }
+
+
+class MockCompactor:
+    """Mock compaction agent used for tests."""
+
+    def __init__(self):
+        self.run_calls = []
+
+    async def run(self, message, deps=None):
+        self.run_calls.append((message, deps))
+        if not deps:
+            return
+        if deps.include_preferences:
+            for block_id, data in deps.preference_blocks():
+                deps.rewrite_preference_block(block_id, text=data.get("text", "").strip())
+        if deps.include_conversations:
+            for session_id, data in deps.conversation_blocks():
+                summary = data.get("summary", "")
+                if summary:
+                    deps.rewrite_conversation_block(session_id, summary=summary.strip())
 
 
 class TestDiary:
@@ -67,6 +88,45 @@ class TestDiary:
             max_prefs_per_category=10,
             max_conversations=5,
         )
+
+    @pytest.fixture
+    def compaction_config(self):
+        return CompactionConfig(
+            enabled=True,
+            total_char_threshold=0,
+            segment_char_threshold=0,
+            user_turn_interval=1,
+        )
+
+    @pytest.fixture
+    def compactor(self):
+        return MockCompactor()
+
+    @pytest.fixture
+    def diary_with_compaction(self, backend, mock_agent, compaction_config, compactor):
+        return Diary(
+            backend=backend,
+            pref_table_cls=MyPrefTable,
+            agent=mock_agent,
+            max_prefs_per_category=10,
+            max_conversations=5,
+            compaction_config=compaction_config,
+            compactor=compactor,
+        ), compactor
+
+    @pytest.fixture
+    def diary_compaction_disabled(self, backend, mock_agent):
+        compactor = MockCompactor()
+        diary = Diary(
+            backend=backend,
+            pref_table_cls=MyPrefTable,
+            agent=mock_agent,
+            max_prefs_per_category=10,
+            max_conversations=5,
+            compaction_config=CompactionConfig(enabled=False),
+            compactor=compactor,
+        )
+        return diary, compactor
 
     @pytest.mark.asyncio
     async def test_ensure_session_new(self, diary):
@@ -156,6 +216,55 @@ class TestDiary:
         convs = await diary.last_conversations(user_id, limit=1)
         assert session_id in convs
         assert convs[session_id]["_turns"] == 1
+
+    @pytest.mark.asyncio
+    async def test_compaction_runs_and_metadata_persist(self, diary_with_compaction):
+        (diary, compactor) = diary_with_compaction
+        user_id = "compaction_user"
+        session_id = "compaction_session"
+
+        await diary.update_memory(user_id, session_id, "I love compact data", "Noted")
+
+        assert compactor.run_calls
+
+        prefs = await diary._load_prefs(user_id)
+        convs = await diary._load_convs(user_id)
+
+        pref_meta = prefs["_meta"].get("compaction", {})
+        conv_meta = convs["_meta"].get("compaction", {})
+
+        assert pref_meta.get("last_run")
+        assert conv_meta.get("last_run")
+        assert conv_meta.get("turns_since_compaction") == 0
+        assert conv_meta.get("total_turns") == 1
+
+        new_diary = Diary(
+            backend=diary.backend,
+            pref_table_cls=MyPrefTable,
+            agent=MockAgent(),
+            max_prefs_per_category=10,
+            max_conversations=5,
+        )
+        reloaded_prefs = await new_diary._load_prefs(user_id)
+        assert (
+            reloaded_prefs["_meta"].get("compaction", {}).get("last_run")
+            == pref_meta.get("last_run")
+        )
+
+    @pytest.mark.asyncio
+    async def test_compaction_skipped_when_disabled(self, diary_compaction_disabled):
+        diary, compactor = diary_compaction_disabled
+        user_id = "disabled_user"
+        session_id = "disabled_session"
+
+        await diary.update_memory(user_id, session_id, "No compaction", "Okay")
+
+        assert not compactor.run_calls
+
+        convs = await diary._load_convs(user_id)
+        conv_meta = convs["_meta"].get("compaction", {})
+        assert conv_meta.get("turns_since_compaction") == 1
+        assert "last_run" not in conv_meta
 
     @pytest.mark.asyncio
     async def test_preference_limits(self, diary, backend):
