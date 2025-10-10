@@ -105,13 +105,22 @@ MOCK_RESTAURANTS = [
 MOCK_BOOKINGS = []
 
 
-def search_restaurants(ctx: RunContext, query: str = "", cuisine: str = "") -> str:
+def search_restaurants(ctx: RunContext, query: str = "", cuisine: str = "") -> str:  # noqa: ARG001
     """Search function that returns available restaurants for booking."""
+    _ = (ctx, query, cuisine)
     return "Here are the available restaurants for booking: " + json.dumps(MOCK_RESTAURANTS, indent=2)
 
 
-def book_restaurant(ctx: RunContext, restaurant_id: str, date: str, time: str, party_size: int, special_requests: str = "") -> str:
+def book_restaurant(
+    ctx: RunContext,
+    restaurant_id: str,
+    date: str,
+    time: str,
+    party_size: int,
+    special_requests: str = "",
+) -> str:  # noqa: ARG001
     """Book a table at a restaurant."""
+    _ = ctx
     # Find the restaurant
     restaurant = None
     for rest in MOCK_RESTAURANTS:
@@ -144,8 +153,9 @@ def book_restaurant(ctx: RunContext, restaurant_id: str, date: str, time: str, p
     return f"✅ Booking confirmed! Reservation #{booking_id} at {restaurant['name']} for {party_size} people on {date} at {time}. {f'Special requests: {special_requests}' if special_requests else ''}"
 
 
-def check_availability(ctx: RunContext, restaurant_id: str, date: str) -> str:
+def check_availability(ctx: RunContext, restaurant_id: str, date: str) -> str:  # noqa: ARG001
     """Check availability for a specific restaurant on a date."""
+    _ = ctx
     restaurant = None
     for rest in MOCK_RESTAURANTS:
         if rest["id"] == restaurant_id:

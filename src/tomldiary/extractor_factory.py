@@ -4,7 +4,9 @@ import os
 import re
 import textwrap
 import tomllib
+import warnings
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +14,7 @@ import httpx
 import tomli_w
 from pydantic import ValidationError
 from pydantic_ai import Agent, ModelHTTPError, ModelRetry, RunContext, Tool
+from pydantic_ai.models import KnownModelName, Model
 from pydantic_ai.models.fallback import FallbackModel
 from textprompts import Prompt
 
@@ -41,17 +44,44 @@ def extractor_prompt_check(prompt: str | Path | Prompt) -> None:
         text = prompt.prompt
     else:
         text = Prompt.from_path(Path(prompt), meta="allow").prompt
-    _warn_missing_placeholders(text, REQUIRED_PLACEHOLDERS)
+    _warn_missing_placeholders(text, list(REQUIRED_PLACEHOLDERS))
+
+
+ModelInput = Model | KnownModelName | str
+
+
+def _clone_model(model: ModelInput) -> ModelInput:
+    """Create a clone of a model instance when possible."""
+
+    if isinstance(model, Model):
+        try:
+            return deepcopy(model)
+        except TypeError:  # pragma: no cover - defensive copy fallback
+            return model
+    return model
 
 
 def extractor_agent(
     pref_table_cls,
-    model_name: str | None = None,
+    model: ModelInput | None = None,
     prompt_template: str | Path | Prompt | None = None,
     fallback_retries: int = 3,
     fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None,
+    *,
+    model_name: ModelInput | None = None,
 ):  # pragma: no cover - CLI helper
     """Build an extraction agent for the given preference table class."""
+
+    if model_name is not None:
+        if model is not None:  # pragma: no cover - defensive
+            msg = "Provide either 'model' or 'model_name', not both."
+            raise ValueError(msg)
+        warnings.warn(
+            "The 'model_name' parameter is deprecated, use 'model' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        model = model_name
 
     # 1. derive docs from preference table class docstring
     docs = textwrap.dedent(inspect.getdoc(pref_table_cls) or "")
@@ -76,7 +106,7 @@ def extractor_agent(
     system_prompt = prompt_obj.prompt.format(categories_doc=docs, current_time=current_time)
 
     # 2. assemble tools with updated names
-    tool_list = [
+    tool_list: list[Tool[MemoryDeps]] = [
         Tool(tools.list_categories, takes_ctx=True),
         Tool(tools.list_preferences, takes_ctx=True),
         Tool(tools.list_conversation_summary, takes_ctx=True),
@@ -94,22 +124,23 @@ def extractor_agent(
         and not isinstance(fallback_on, str)
         and not callable(fallback_on)
     ):
-        fallback_on_param: Callable[[Exception], bool] | Sequence[type[Exception]] = tuple(
+        fallback_on_param: Callable[[Exception], bool] | tuple[type[Exception], ...] = tuple(
             fallback_on
         )
     else:
         fallback_on_param = fallback_on
 
-    model_name = model_name or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")
-    fallback_model = (
-        FallbackModel(
-            model_name,
-            *[model_name] * fallback_retries,
+    model_input: ModelInput = model or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")  # type: ignore[assignment]
+
+    fallback_model: ModelInput | FallbackModel
+    if fallback_retries > 0:
+        fallback_model = FallbackModel(
+            model_input,
+            *(_clone_model(model_input) for _ in range(fallback_retries)),
             fallback_on=fallback_on_param,
         )
-        if fallback_retries > 0
-        else model_name
-    )
+    else:
+        fallback_model = model_input
 
     agent = Agent(
         fallback_model,
@@ -145,6 +176,6 @@ def build_extractor(
 
     return extractor_agent(
         pref_table_cls,
-        model_name=model_name,
+        model=model_name,
         prompt_template=prompt_template_path,
     )

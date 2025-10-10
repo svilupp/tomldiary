@@ -2,6 +2,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import ModelHTTPError
 from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.models.test import TestModel
 from textprompts import Prompt
 
 from src.tomldiary.extractor_factory import (
@@ -11,8 +12,13 @@ from src.tomldiary.extractor_factory import (
 from tests.test_user_pref_table import MyPrefTable
 
 
-def test_fallback_model_creation():
-    agent = extractor_agent(MyPrefTable, model_name="test", fallback_retries=2)
+def test_fallback_model_creation(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    agent = extractor_agent(
+        MyPrefTable,
+        model="openai:gpt-4o-mini",
+        fallback_retries=2,
+    )
     assert isinstance(agent.model, FallbackModel)
     assert len(agent.model.models) == 3
     assert agent.model._fallback_on(ModelHTTPError(500, "test"))
@@ -32,7 +38,7 @@ def test_prompt_object_handled(tmp_path, capsys):
     prompt_path = tmp_path / "prompt.txt"
     prompt_path.write_text("Test {categories_doc} {current_time}")
     prompt_obj = Prompt.from_path(prompt_path, meta="allow")
-    agent = extractor_agent(MyPrefTable, model_name="test", prompt_template=prompt_obj)
+    agent = extractor_agent(MyPrefTable, model=TestModel(), prompt_template=prompt_obj)
     assert "{categories_doc}" not in agent._system_prompts[0]
     assert "{current_time}" not in agent._system_prompts[0]
     assert capsys.readouterr().out == ""
@@ -41,7 +47,7 @@ def test_prompt_object_handled(tmp_path, capsys):
 def test_missing_placeholder_warning(tmp_path, capsys):
     prompt_path = tmp_path / "prompt.txt"
     prompt_path.write_text("No placeholders here")
-    extractor_agent(MyPrefTable, model_name="test", prompt_template=prompt_path)
+    extractor_agent(MyPrefTable, model=TestModel(), prompt_template=prompt_path)
     captured = capsys.readouterr()
     assert "Missing placeholder" in captured.out
     assert "categories_doc" in captured.out
@@ -67,14 +73,15 @@ def test_prompt_check_no_warning_when_valid(tmp_path, capsys):
 
 
 def test_env_model_default(monkeypatch):
-    monkeypatch.setenv("EXTRACTOR_MODEL", "test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("EXTRACTOR_MODEL", "openai:gpt-4o-mini")
     agent = extractor_agent(MyPrefTable, fallback_retries=1)
-    assert agent.model.models[0].model_name == "test"
+    assert agent.model.models[0].model_name == "gpt-4o-mini"
     monkeypatch.delenv("EXTRACTOR_MODEL", raising=False)
 
 
 def test_current_time_in_prompt():
-    agent = extractor_agent(MyPrefTable, model_name="test")
+    agent = extractor_agent(MyPrefTable, model=TestModel())
     system_prompt = agent._system_prompts[0]
     # Check that current_time placeholder was replaced with a timestamp
     assert "{current_time}" not in system_prompt

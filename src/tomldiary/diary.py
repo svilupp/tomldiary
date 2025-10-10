@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import tomli_w
 from pydantic_ai import format_as_xml
+from pydantic_ai.models import Model
 
 from .compaction import (
     CompactionConfig,
@@ -32,8 +33,8 @@ class Diary:
         cats = extract_categories_from_schema(pref_table_cls)
         if agent is None:
             self.agent = extractor_agent(pref_table_cls)
-        elif isinstance(agent, str):
-            self.agent = extractor_agent(pref_table_cls, model_name=agent)
+        elif isinstance(agent, str | Model):
+            self.agent = extractor_agent(pref_table_cls, model=agent)
         else:
             self.agent = agent
         self.allowed = cats

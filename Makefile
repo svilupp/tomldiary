@@ -31,12 +31,15 @@ format:
 	ruff format src tests
 	ruff check --fix src tests
 
+typecheck:
+	uv run mypy src/tomldiary --ignore-missing-imports
+
 # Run tests
 test:
 	uv run -m pytest --cov=tomldiary --cov-report=term-missing
 
 # CI target - run lint and test
-ci: lint test
+ci: lint test typecheck
 
 # Git save - add all changes and commit
 save:
