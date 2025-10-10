@@ -44,7 +44,7 @@ def extractor_prompt_check(prompt: str | Path | Prompt) -> None:
         text = prompt.prompt
     else:
         text = Prompt.from_path(Path(prompt), meta="allow").prompt
-    _warn_missing_placeholders(text, REQUIRED_PLACEHOLDERS)
+    _warn_missing_placeholders(text, list(REQUIRED_PLACEHOLDERS))
 
 
 ModelInput = Model | KnownModelName | str
@@ -106,7 +106,7 @@ def extractor_agent(
     system_prompt = prompt_obj.prompt.format(categories_doc=docs, current_time=current_time)
 
     # 2. assemble tools with updated names
-    tool_list = [
+    tool_list: list[Tool[MemoryDeps]] = [
         Tool(tools.list_categories, takes_ctx=True),
         Tool(tools.list_preferences, takes_ctx=True),
         Tool(tools.list_conversation_summary, takes_ctx=True),
@@ -124,13 +124,13 @@ def extractor_agent(
         and not isinstance(fallback_on, str)
         and not callable(fallback_on)
     ):
-        fallback_on_param: Callable[[Exception], bool] | Sequence[type[Exception]] = tuple(
+        fallback_on_param: Callable[[Exception], bool] | tuple[type[Exception], ...] = tuple(
             fallback_on
         )
     else:
         fallback_on_param = fallback_on
 
-    model_input: ModelInput = model or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")
+    model_input: ModelInput = model or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")  # type: ignore[assignment]
 
     fallback_model: ModelInput | FallbackModel
     if fallback_retries > 0:
