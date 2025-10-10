@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tomldiary.compaction import CompactionConfig, CompactionDeps, CompactionStats
 from tomldiary import compaction_tools
+from tomldiary.compaction import CompactionConfig, CompactionDeps, CompactionStats
 
 
 class DummyCtx:

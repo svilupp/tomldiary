@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Iterable
 
 from pydantic_ai import Agent, Tool
 from textprompts import Prompt
@@ -74,18 +74,21 @@ class CompactionConfig:
         ):
             triggered = True
 
-        if self.schedule_at is not None and now >= self.schedule_at:
-            if last_run is None or last_run < self.schedule_at:
-                triggered = True
+        if (
+            self.schedule_at is not None
+            and now >= self.schedule_at
+            and (last_run is None or last_run < self.schedule_at)
+        ):
+            triggered = True
 
         if not triggered:
             return False
 
-        if last_run is not None and self.cooldown_seconds:
-            if now - last_run < timedelta(seconds=self.cooldown_seconds):
-                return False
-
-        return True
+        return not (
+            last_run is not None
+            and self.cooldown_seconds
+            and now - last_run < timedelta(seconds=self.cooldown_seconds)
+        )
 
 
 @dataclass
@@ -201,7 +204,7 @@ def compactor_agent(
 
     system_prompt = prompt_obj.prompt
 
-    tools = [
+    tools: list[Tool[CompactionDeps]] = [
         Tool(compaction_tools.list_preference_blocks, takes_ctx=True),
         Tool(compaction_tools.get_preference_block, takes_ctx=True),
         Tool(compaction_tools.rewrite_preference_block, takes_ctx=True),

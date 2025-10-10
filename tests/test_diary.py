@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from tomldiary import Diary
-from tomldiary.compaction import CompactionConfig
 from tomldiary.backends.local import LocalBackend
+from tomldiary.compaction import CompactionConfig
 from tomldiary.models import MemoryDeps
 
 from .test_user_pref_table import MyPrefTable
