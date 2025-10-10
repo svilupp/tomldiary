@@ -179,9 +179,9 @@ Update the summary and keywords for the current conversation session.
 ### `shutdown_all_background_tasks(timeout: float = 10.0)`
 Shutdown all background tasks gracefully.
 
-### `extractor_agent(pref_table_cls: Type[BaseModel], model_name: str | None = None, prompt_template: str | Path | Prompt | None = None, fallback_retries: int = 3, fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None) -> Agent`
+### `extractor_agent(pref_table_cls: Type[BaseModel], model: Model | KnownModelName | str | None = None, prompt_template: str | Path | Prompt | None = None, fallback_retries: int = 3, fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None) -> Agent`
 Build the default extraction agent for a preference table. Uses `EXTRACTOR_MODEL`
-or `openai:gpt-5-mini` for the model name. `build_extractor()` is a legacy alias.
+or `openai:gpt-5-mini` when no model is provided. `build_extractor()` is a legacy alias.
 
 ### `extractor_prompt_check(prompt: str | Path | Prompt) -> None`
 Validate a custom extractor prompt and warn about missing placeholders.

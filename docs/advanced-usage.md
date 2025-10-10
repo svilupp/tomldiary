@@ -102,18 +102,22 @@ class RedisBackend:
 You can provide your own extraction agent:
 
 ```python
-from pydantic_ai import Agent
+from pydantic_ai import RunContext
 from tomldiary import extractor_agent
+from tomldiary.models import MemoryDeps
 
 # Start with the default agent
 agent = extractor_agent(MyPrefTable)
 
-# Customize the agent
-agent = agent.with_system_prompt("""
-You are a specialized memory extraction agent.
-Focus on extracting only the most important information.
-Be conservative about what you store.
-""")
+
+@agent.system_prompt
+def custom_system_prompt(ctx: RunContext[MemoryDeps]) -> str:
+    return """
+    You are a specialized memory extraction agent.
+    Focus on extracting only the most important information.
+    Be conservative about what you store.
+    """.strip()
+
 
 # Use your custom agent
 diary = Diary(
