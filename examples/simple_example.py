@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
 from tomldiary.models import PreferenceItem
+from tomldiary.compaction import CompactionConfig
 
 
 # Define a simple preference schema
@@ -107,12 +108,18 @@ async def simple_demo():
 
     # 2. Create diary with simple schema
     print("2️⃣ Creating memory diary...")
+    compaction = CompactionConfig(
+        enabled=False,  # flip to True to enable background compaction sweeps
+        compact_preferences=True,
+        compact_conversations=False,
+    )
     diary = Diary(
         backend=backend,
         pref_table_cls=SimplePrefTable,
         agent=(agent, ["like", "dislike", "about"]),
         max_prefs_per_category=5,
         max_conversations=3,
+        compaction_config=compaction,
     )
 
     # 3. Create writer for async operations

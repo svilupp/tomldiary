@@ -66,6 +66,24 @@ cd examples
 python extractor_agent_example.py
 ```
 
+### 🗜️ Compaction Agent (`compaction_demo_quick.py`, `compaction_agent_stress_test.py`)
+Demonstrates the compaction service that consolidates redundant memories while preserving specific details.
+
+**Quick Demo (`compaction_demo_quick.py`):**
+- Fast demonstration of compaction on a small dataset
+- Shows before/after memory reduction
+
+**Stress Test (`compaction_agent_stress_test.py`):**
+- Comprehensive validation across 6 scenarios
+- Tests redundancy elimination, contradiction resolution, noise filtering, and semantic grouping
+
+**Run:**
+```bash
+cd examples
+python compaction_demo_quick.py          # Quick demo
+python compaction_agent_stress_test.py   # Full test suite
+```
+
 ## Preference Schema
 
 These examples use the comprehensive `CulinaryPrefTable` with detailed AI instructions for each category:
@@ -120,6 +138,9 @@ These examples use the comprehensive `CulinaryPrefTable` with detailed AI instru
 
 - `simple_example.py` - **Educational showcase** (start here!)
 - `example_cooking_show.py` - Advanced AI-powered cooking show simulation
+- `extractor_agent_example.py` - Custom extractor with manual Agent setup
+- `compaction_demo_quick.py` - Quick compaction demonstration
+- `compaction_agent_stress_test.py` - Comprehensive compaction validation
 - `culinary_prefs.py` - Comprehensive preference schema with AI instructions
 - `memory_*/` - Generated TOML files (created when examples run)
 

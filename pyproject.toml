@@ -1,6 +1,6 @@
 [project]
 name = "tomldiary"
-version = "0.0.5"
+version = "0.1.0"
 description = "A lightweight TOML-based memory system for AI agents"
 readme = "README.md"
 license = "MIT"
@@ -20,7 +20,7 @@ classifiers = [
 dependencies = [
     "pydantic>=2",
     "pydantic-ai>=1.0",
-    "textprompts>=0.0.4",
+    "textprompts>=1.0",
     "thefuzz>=0.22.1",
     "tomli-w",
 ]

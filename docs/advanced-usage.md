@@ -173,6 +173,38 @@ diary = Diary(
 )
 ```
 
+### Automated Compaction Agent
+
+Beyond hard limits, you can schedule clean-up sweeps that rewrite or delete stale
+entries. `CompactionConfig` stores counters inside `_meta.compaction` so trigger state
+survives restarts.
+
+```python
+from tomldiary.compaction import CompactionConfig
+
+compaction = CompactionConfig(
+    enabled=True,
+    total_char_threshold=8000,      # run when the serialized store grows large
+    segment_char_threshold=1000,    # or when an individual block is too long
+    user_turn_interval=40,          # fallback cadence based on user turns
+    cooldown_seconds=600,           # avoid back-to-back sweeps
+    compact_preferences=True,
+    compact_conversations=True,
+)
+
+diary = Diary(
+    backend=backend,
+    pref_table_cls=MyPrefTable,
+    agent=extractor,
+    compaction_config=compaction,
+)
+```
+
+When a sweep runs, the compactor agent uses dedicated tools (`list_preference_blocks`,
+`get_conversation_block`, `rewrite_*`, `delete_*`) and iterates until every block has been
+reviewed. You can disable specific stores by toggling `compact_preferences` or
+`compact_conversations`.
+
 ### Manual Cleanup
 
 Implement custom cleanup logic:

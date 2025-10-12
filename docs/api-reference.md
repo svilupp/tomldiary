@@ -14,7 +14,9 @@ class Diary:
         pref_table_cls: Type[BaseModel],
         agent: Optional[Agent] = None,
         max_prefs_per_category: int = 100,
-        max_conversations: int = 100
+        max_conversations: int = 100,
+        compaction_config: Optional[CompactionConfig] = None,
+        compactor: Optional[Agent] = None,
     )
 ```
 
@@ -26,6 +28,10 @@ class Diary:
   is used with the model name from `EXTRACTOR_MODEL` (default `openai:gpt-5-mini`).
 - `max_prefs_per_category`: Maximum preferences per category (default: 100)
 - `max_conversations`: Maximum conversation history (default: 100)
+- `compaction_config`: Optional `CompactionConfig` describing when automated
+  clean-up sweeps should run.
+- `compactor`: Custom compaction agent instance. When omitted and the config is
+  enabled, `compactor_agent()` builds the default tool-enabled agent.
 
 #### Methods
 
@@ -75,6 +81,25 @@ Gracefully shutdown the writer and wait for pending operations.
 
 ##### `def failed_count() -> int`
 Returns the number of failed operations.
+
+### CompactionConfig
+
+Controls automated compaction sweeps that prune or rewrite stored memories.
+
+```python
+class CompactionConfig:
+    enabled: bool = False
+    total_char_threshold: int | None = None
+    segment_char_threshold: int | None = None
+    user_turn_interval: int | None = None
+    schedule_at: datetime | None = None
+    cooldown_seconds: int = 0
+    compact_preferences: bool = True
+    compact_conversations: bool = True
+```
+
+When active, the diary records `_meta.compaction` stats for both stores, including
+the last run timestamp, rolling character totals, and user-turn counters.
 
 ## Models
 

@@ -2,6 +2,7 @@
 tomldiary - A TOML-based memory system for tracking user preferences and conversations.
 """
 
+from .compaction import CompactionConfig, compactor_agent
 from .diary import Diary, TOMLDiary
 from .extractor_factory import build_extractor, extractor_agent, extractor_prompt_check
 from .models import ConversationItem, MemoryDeps, MetaInfo, PreferenceItem
@@ -20,6 +21,8 @@ __all__ = [
     "ConversationItem",
     "MemoryDeps",
     "MetaInfo",
+    "CompactionConfig",
+    "compactor_agent",
     "build_extractor",
     "extractor_agent",
     "extractor_prompt_check",
