@@ -8,8 +8,6 @@ from pathlib import Path
 from pydantic_ai import Agent, Tool
 from textprompts import Prompt
 
-from . import compaction_tools
-
 
 @dataclass
 class CompactionStats:
@@ -193,6 +191,9 @@ def compactor_agent(
     prompt_template: str | Path | Prompt | None = None,
 ) -> Agent[CompactionDeps]:
     """Build an agent responsible for compaction sweeps."""
+
+    # Import here to avoid circular import at module level
+    from . import compaction_tools
 
     if prompt_template is None:
         prompt_template = Path(__file__).parent / "prompts" / "compactor_prompt.txt"
