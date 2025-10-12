@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-10-12
+
+### Added
+- Optional compaction ("summarization") agent and configuration (to compress the memory after X turns or if character limit is reached), see `examples/compaction_demo_quick.py`
+
+### Updated
+- Updated pydantic-ai dependency to 1.0 and textprompts dependency to 1.0
+- Updated extractor prompt to version 3.0 with time context
+
+### Added
+
 ## [0.0.5] - 2025-01-02
 
 ### Updated
