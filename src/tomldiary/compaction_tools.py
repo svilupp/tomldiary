@@ -7,7 +7,7 @@ from pydantic_ai import RunContext
 from .compaction import CompactionDeps
 
 
-async def list_preference_blocks(ctx: "RunContext[CompactionDeps]") -> str:
+async def list_preference_blocks(ctx: RunContext[CompactionDeps]) -> str:
     """List the preference blocks available for compaction."""
 
     blocks = ctx.deps.preference_blocks()
@@ -21,7 +21,7 @@ async def list_preference_blocks(ctx: "RunContext[CompactionDeps]") -> str:
     return "\n".join(lines)
 
 
-async def get_preference_block(ctx: "RunContext[CompactionDeps]", block_id: str) -> str:
+async def get_preference_block(ctx: RunContext[CompactionDeps], block_id: str) -> str:
     """Return the raw text + context for a specific preference block."""
 
     try:
@@ -37,7 +37,7 @@ async def get_preference_block(ctx: "RunContext[CompactionDeps]", block_id: str)
 
 
 async def rewrite_preference_block(
-    ctx: "RunContext[CompactionDeps]",
+    ctx: RunContext[CompactionDeps],
     block_id: str,
     *,
     text: str,
@@ -52,7 +52,7 @@ async def rewrite_preference_block(
     return f"Rewrote preference block '{block_id}'."
 
 
-async def delete_preference_block(ctx: "RunContext[CompactionDeps]", block_id: str) -> str:
+async def delete_preference_block(ctx: RunContext[CompactionDeps], block_id: str) -> str:
     """Remove a preference block."""
 
     try:
@@ -62,7 +62,7 @@ async def delete_preference_block(ctx: "RunContext[CompactionDeps]", block_id: s
     return f"Deleted preference block '{block_id}'."
 
 
-async def list_conversation_blocks(ctx: "RunContext[CompactionDeps]") -> str:
+async def list_conversation_blocks(ctx: RunContext[CompactionDeps]) -> str:
     """List the conversation blocks available for compaction."""
 
     blocks = ctx.deps.conversation_blocks()
@@ -76,7 +76,7 @@ async def list_conversation_blocks(ctx: "RunContext[CompactionDeps]") -> str:
     return "\n".join(lines)
 
 
-async def get_conversation_block(ctx: "RunContext[CompactionDeps]", session_id: str) -> str:
+async def get_conversation_block(ctx: RunContext[CompactionDeps], session_id: str) -> str:
     """Return the summary and keywords for a conversation block."""
 
     try:
@@ -92,7 +92,7 @@ async def get_conversation_block(ctx: "RunContext[CompactionDeps]", session_id: 
 
 
 async def rewrite_conversation_block(
-    ctx: "RunContext[CompactionDeps]",
+    ctx: RunContext[CompactionDeps],
     session_id: str,
     *,
     summary: str,
@@ -107,7 +107,7 @@ async def rewrite_conversation_block(
     return f"Rewrote conversation block '{session_id}'."
 
 
-async def delete_conversation_block(ctx: "RunContext[CompactionDeps]", session_id: str) -> str:
+async def delete_conversation_block(ctx: RunContext[CompactionDeps], session_id: str) -> str:
     """Delete a conversation block entirely."""
 
     try:

@@ -173,9 +173,9 @@ class Diary:
         pref_comp_meta = prefs_meta.setdefault("compaction", {})
         conv_comp_meta = convs_meta.setdefault("compaction", {})
 
-        conv_comp_meta["turns_since_compaction"] = conv_comp_meta.get(
-            "turns_since_compaction", 0
-        ) + 1
+        conv_comp_meta["turns_since_compaction"] = (
+            conv_comp_meta.get("turns_since_compaction", 0) + 1
+        )
         conv_comp_meta["total_turns"] = conv_comp_meta.get("total_turns", 0) + 1
 
         pref_stats = self._preference_compaction_stats(deps.prefs)

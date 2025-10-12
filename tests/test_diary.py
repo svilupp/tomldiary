@@ -246,9 +246,8 @@ class TestDiary:
             max_conversations=5,
         )
         reloaded_prefs = await new_diary._load_prefs(user_id)
-        assert (
-            reloaded_prefs["_meta"].get("compaction", {}).get("last_run")
-            == pref_meta.get("last_run")
+        assert reloaded_prefs["_meta"].get("compaction", {}).get("last_run") == pref_meta.get(
+            "last_run"
         )
 
     @pytest.mark.asyncio
