@@ -25,7 +25,7 @@ logfire.configure(
     service_name="booking-agent",
     scrubbing=False,
     token=os.getenv("LOGFIRE_TOKEN"),
-    environment='development',
+    environment="development",
     send_to_logfire="if-token-present",
 )
 logfire.instrument_pydantic_ai()
@@ -42,7 +42,7 @@ MOCK_RESTAURANTS = [
         "specialties": ["pasta", "pizza", "risotto"],
         "available_times": ["6:00 PM", "7:30 PM", "9:00 PM"],
         "table_types": ["2-person", "4-person", "6-person"],
-        "features": ["romantic", "date-friendly", "wine selection"]
+        "features": ["romantic", "date-friendly", "wine selection"],
     },
     {
         "id": "rest_002",
@@ -53,7 +53,7 @@ MOCK_RESTAURANTS = [
         "specialties": ["sushi", "sashimi", "ramen"],
         "available_times": ["5:30 PM", "7:00 PM", "8:30 PM"],
         "table_types": ["2-person", "4-person", "sushi bar"],
-        "features": ["fresh fish", "authentic", "chef's choice"]
+        "features": ["fresh fish", "authentic", "chef's choice"],
     },
     {
         "id": "rest_003",
@@ -64,7 +64,7 @@ MOCK_RESTAURANTS = [
         "specialties": ["salads", "smoothie bowls", "vegan burgers"],
         "available_times": ["12:00 PM", "1:30 PM", "6:00 PM"],
         "table_types": ["2-person", "4-person"],
-        "features": ["vegan", "organic", "healthy", "casual"]
+        "features": ["vegan", "organic", "healthy", "casual"],
     },
     {
         "id": "rest_004",
@@ -75,7 +75,7 @@ MOCK_RESTAURANTS = [
         "specialties": ["curry", "tandoor", "naan"],
         "available_times": ["6:30 PM", "8:00 PM", "9:30 PM"],
         "table_types": ["2-person", "4-person", "6-person", "large groups"],
-        "features": ["spicy", "family-friendly", "authentic"]
+        "features": ["spicy", "family-friendly", "authentic"],
     },
     {
         "id": "rest_005",
@@ -86,7 +86,7 @@ MOCK_RESTAURANTS = [
         "specialties": ["steaks", "burgers", "ribs"],
         "available_times": ["7:00 PM", "8:30 PM"],
         "table_types": ["2-person", "4-person", "private booth"],
-        "features": ["upscale", "business dining", "wine cellar"]
+        "features": ["upscale", "business dining", "wine cellar"],
     },
     {
         "id": "rest_006",
@@ -97,8 +97,8 @@ MOCK_RESTAURANTS = [
         "specialties": ["grilled fish", "hummus", "falafel"],
         "available_times": ["6:00 PM", "7:30 PM", "9:00 PM"],
         "table_types": ["2-person", "4-person", "outdoor patio"],
-        "features": ["healthy", "seafood", "outdoor dining"]
-    }
+        "features": ["healthy", "seafood", "outdoor dining"],
+    },
 ]
 
 # Mock booking storage
@@ -108,7 +108,9 @@ MOCK_BOOKINGS = []
 def search_restaurants(ctx: RunContext, query: str = "", cuisine: str = "") -> str:  # noqa: ARG001
     """Search function that returns available restaurants for booking."""
     _ = (ctx, query, cuisine)
-    return "Here are the available restaurants for booking: " + json.dumps(MOCK_RESTAURANTS, indent=2)
+    return "Here are the available restaurants for booking: " + json.dumps(
+        MOCK_RESTAURANTS, indent=2
+    )
 
 
 def book_restaurant(
@@ -145,7 +147,7 @@ def book_restaurant(
         "time": time,
         "party_size": party_size,
         "special_requests": special_requests,
-        "status": "confirmed"
+        "status": "confirmed",
     }
 
     MOCK_BOOKINGS.append(booking)
@@ -165,11 +167,14 @@ def check_availability(ctx: RunContext, restaurant_id: str, date: str) -> str:  
     if not restaurant:
         return f"❌ Restaurant with ID {restaurant_id} not found."
 
-    return f"📅 {restaurant['name']} availability for {date}:\n" + json.dumps({
-        "available_times": restaurant["available_times"],
-        "table_types": restaurant["table_types"],
-        "features": restaurant["features"]
-    }, indent=2)
+    return f"📅 {restaurant['name']} availability for {date}:\n" + json.dumps(
+        {
+            "available_times": restaurant["available_times"],
+            "table_types": restaurant["table_types"],
+            "features": restaurant["features"],
+        },
+        indent=2,
+    )
 
 
 class UserDiningPreferences(BaseModel):
@@ -189,45 +194,48 @@ class UserDiningPreferences(BaseModel):
     Be specific with context like preference: "Italian restaurants" context: "for romantic dates".
     Extract implicit preferences - business person = quiet restaurants, family = kid-friendly places.
     """
+
     likes: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Cuisines, restaurants, dining styles, and atmospheres the user enjoys. "
         "Context-specific preferences (date nights, business meals, family dining, celebrations). "
         "Examples: 'loves Italian restaurants for dates', 'enjoys sushi bars for lunch meetings', "
-        "'prefers cozy cafes for casual dining', 'likes outdoor patios in summer'"
+        "'prefers cozy cafes for casual dining', 'likes outdoor patios in summer'",
     )
     dislikes: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Foods, restaurant types, atmospheres, and service styles the user avoids. "
         "Context-specific dislikes and dining aversions. "
         "Examples: 'hates noisy restaurants', 'avoids chain restaurants', 'dislikes formal dining', "
-        "'uncomfortable with sushi bars', 'never books weekend brunch'"
+        "'uncomfortable with sushi bars', 'never books weekend brunch'",
     )
     dietary_restrictions: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Allergies, dietary choices, and health-related food restrictions. "
         "Examples: 'allergic to shellfish', 'follows vegan diet', 'gluten intolerant', "
-        "'keto lifestyle', 'lactose sensitive', 'avoiding alcohol'"
+        "'keto lifestyle', 'lactose sensitive', 'avoiding alcohol'",
     )
     booking_patterns: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Preferred booking times, party sizes, occasions, and seating preferences. "
         "Examples: 'prefers 7:30 PM reservations', 'usually books for 2 people', "
-        "'likes window seats', 'books private booths for business', 'prefers early dinner with kids'"
+        "'likes window seats', 'books private booths for business', 'prefers early dinner with kids'",
     )
     about_the_user: dict[str, PreferenceItem] = Field(
         default_factory=dict,
         description="Lifestyle factors and personal details relevant to dining choices. "
         "Examples: 'busy executive - needs quick service', 'celebrates anniversaries monthly', "
         "'has young children - needs kid-friendly places', 'entertaining clients often', "
-        "'lives downtown - prefers walking distance', 'works late - needs late reservations'"
+        "'lives downtown - prefers walking distance', 'works late - needs late reservations'",
     )
+
 
 @dataclass
 class BookingContext:
     user_id: str
     session_id: str
     diary: Diary
+
 
 # Create the booking agent
 booking_agent = Agent(
@@ -254,8 +262,9 @@ booking_agent = Agent(
     - Making actual restaurant bookings when requested
 
     Always ask for specific details needed for bookings: date, time, party size, and any special requests.
-    Be enthusiastic about helping them find the perfect dining experience!"""
+    Be enthusiastic about helping them find the perfect dining experience!""",
 )
+
 
 @booking_agent.system_prompt
 async def add_booking_memory(ctx: RunContext[BookingContext]) -> str:
@@ -277,7 +286,9 @@ async def add_booking_memory(ctx: RunContext[BookingContext]) -> str:
     return "\n\n".join(memory_parts) if memory_parts else ""
 
 
-async def booking_conversation(user_id: str, session_id: str, message: str, diary: Diary, history=None):
+async def booking_conversation(
+    user_id: str, session_id: str, message: str, diary: Diary, history=None
+):
     """Run a booking conversation with memory context."""
     print(f"\n🍽️ Booking Session: {session_id}")
     print("-" * 40)
@@ -293,10 +304,7 @@ async def booking_conversation(user_id: str, session_id: str, message: str, diar
 
     # Update memory after every conversation
     await diary.update_memory(
-        user_id=user_id,
-        session_id=session_id,
-        user_msg=message,
-        assistant_msg=result.output
+        user_id=user_id, session_id=session_id, user_msg=message, assistant_msg=result.output
     )
 
     return result
@@ -313,29 +321,41 @@ async def booking_demo():
         backend=backend,
         pref_table_cls=UserDiningPreferences,
         max_prefs_per_category=20,
-        max_conversations=10
+        max_conversations=10,
     )
 
     user_id = "demo_user"
 
     # Booking conversations that reveal dining preferences and booking patterns
     conversations = [
-        ("anniversary_dinner", [
-            "Hi! I need to book a romantic dinner for my anniversary next Friday. We love Italian food and prefer cozy, intimate places. Can you help me find something special?",
-            "Perfect! Can you book us a table for 2 at Bella Italia for Friday at 7:30 PM? We'd love a quiet table if possible."
-        ]),
-        ("business_lunch", [
-            "I need to book lunch for a business meeting next Tuesday. Somewhere quiet where we can talk, good for 4 people. I'm vegetarian but my clients eat everything.",
-            "Actually, let me check availability at a few places first. What are the options for Tuesday around 12:30 PM?"
-        ]),
-        ("dietary_restrictions", [
-            "I'm looking for dinner reservations but I'm vegan and my friend is gluten-free. We need somewhere that can accommodate both dietary restrictions.",
-            "Green Garden Cafe sounds perfect! Can you book us a table for 2 this Saturday at 6:00 PM?"
-        ]),
-        ("family_celebration", [
-            "We're celebrating my mom's birthday with the whole family - about 8 people including 2 kids. We need somewhere family-friendly but still nice. She loves Mediterranean food.",
-            "That sounds great! Can you book Mediterranean Breeze for Sunday at 6:00 PM for 8 people? Please mention it's for a birthday celebration."
-        ])
+        (
+            "anniversary_dinner",
+            [
+                "Hi! I need to book a romantic dinner for my anniversary next Friday. We love Italian food and prefer cozy, intimate places. Can you help me find something special?",
+                "Perfect! Can you book us a table for 2 at Bella Italia for Friday at 7:30 PM? We'd love a quiet table if possible.",
+            ],
+        ),
+        (
+            "business_lunch",
+            [
+                "I need to book lunch for a business meeting next Tuesday. Somewhere quiet where we can talk, good for 4 people. I'm vegetarian but my clients eat everything.",
+                "Actually, let me check availability at a few places first. What are the options for Tuesday around 12:30 PM?",
+            ],
+        ),
+        (
+            "dietary_restrictions",
+            [
+                "I'm looking for dinner reservations but I'm vegan and my friend is gluten-free. We need somewhere that can accommodate both dietary restrictions.",
+                "Green Garden Cafe sounds perfect! Can you book us a table for 2 this Saturday at 6:00 PM?",
+            ],
+        ),
+        (
+            "family_celebration",
+            [
+                "We're celebrating my mom's birthday with the whole family - about 8 people including 2 kids. We need somewhere family-friendly but still nice. She loves Mediterranean food.",
+                "That sounds great! Can you book Mediterranean Breeze for Sunday at 6:00 PM for 8 people? Please mention it's for a birthday celebration.",
+            ],
+        ),
     ]
 
     print("\n📅 Starting booking conversations...\n")
@@ -349,7 +369,7 @@ async def booking_demo():
                 session_id=session_id,
                 message=message,
                 diary=diary,
-                history=result.all_messages() if result else None
+                history=result.all_messages() if result else None,
             )
         await asyncio.sleep(0.5)  # Brief pause between sessions
 
@@ -360,7 +380,7 @@ async def booking_demo():
     formatted_prefs = await diary.pretty_preferences(user_id)
     if formatted_prefs != "No preferences found for user.":
         print("🍽️ Dining Preferences:")
-        for line in formatted_prefs.split('\n'):
+        for line in formatted_prefs.split("\n"):
             if line.strip():
                 print(f"  {line}")
 
@@ -368,7 +388,7 @@ async def booking_demo():
     formatted_convs = await diary.pretty_conversations(user_id, limit=5)
     if formatted_convs != "No conversations found for user.":
         print("\n💬 Recent Booking Sessions:")
-        for line in formatted_convs.split('\n'):
+        for line in formatted_convs.split("\n"):
             if line.strip():
                 print(f"  {line}")
 
@@ -376,7 +396,9 @@ async def booking_demo():
     if MOCK_BOOKINGS:
         print("\n📋 Confirmed Reservations:")
         for booking in MOCK_BOOKINGS:
-            print(f"  ✅ {booking['restaurant_name']} - {booking['date']} at {booking['time']} for {booking['party_size']} people")
+            print(
+                f"  ✅ {booking['restaurant_name']} - {booking['date']} at {booking['time']} for {booking['party_size']} people"
+            )
 
     print("\n✨ Dining memories and bookings saved successfully!")
     print("📁 Check the './memories' directory for TOML files")

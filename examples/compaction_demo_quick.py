@@ -13,12 +13,13 @@ from culinary_prefs import CulinaryPrefTable
 
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
 async def main():
     print("\n🧪 QUICK COMPACTION DEMO")
-    print("="*70)
+    print("=" * 70)
     print("Demonstrating memory compression with redundant Italian food preferences\n")
 
     # Setup with aggressive compaction
@@ -56,12 +57,12 @@ async def main():
     ]
 
     for i, phrase in enumerate(redundant_phrases):
-        print(f"   {i+1}. Adding: \"{phrase}\"")
+        print(f'   {i + 1}. Adding: "{phrase}"')
         await diary.update_memory(
             user_id=user_id,
             session_id=f"interview_{i}",
             user_msg="What's your favorite cuisine?",
-            assistant_msg=phrase
+            assistant_msg=phrase,
         )
 
     # Get stats BEFORE showing to user
@@ -77,8 +78,7 @@ async def main():
 
     conv_count_before = len(convs_before.get("conversations", {}))
     conv_chars_before = sum(
-        len(data.get("summary", ""))
-        for data in convs_before.get("conversations", {}).values()
+        len(data.get("summary", "")) for data in convs_before.get("conversations", {}).values()
     )
 
     print(f"\n📊 BEFORE COMPACTION:")
@@ -92,7 +92,7 @@ async def main():
         user_id=user_id,
         session_id="final",
         user_msg="Any other thoughts?",
-        assistant_msg="I just love Italian food so much!"
+        assistant_msg="I just love Italian food so much!",
     )
 
     # Get stats AFTER
@@ -108,8 +108,7 @@ async def main():
 
     conv_count_after = len(convs_after.get("conversations", {}))
     conv_chars_after = sum(
-        len(data.get("summary", ""))
-        for data in convs_after.get("conversations", {}).values()
+        len(data.get("summary", "")) for data in convs_after.get("conversations", {}).values()
     )
 
     print(f"\n📊 AFTER COMPACTION:")
@@ -121,7 +120,9 @@ async def main():
     if pref_chars_before > 0:
         pref_reduction = (pref_chars_before - pref_chars_after) / pref_chars_before * 100
         print(f"\n✨ COMPRESSION:")
-        print(f"   • Preference chars: {pref_chars_before} → {pref_chars_after} ({pref_reduction:.1f}% reduction)")
+        print(
+            f"   • Preference chars: {pref_chars_before} → {pref_chars_after} ({pref_reduction:.1f}% reduction)"
+        )
 
     if pref_count_before != pref_count_after:
         print(f"   • Preference blocks: {pref_count_before} → {pref_count_after}")

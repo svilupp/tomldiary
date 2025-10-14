@@ -9,6 +9,14 @@ import pytest
 
 from tomldiary.backends.local import LocalBackend
 
+# Try to import FirestoreBackend if available
+try:
+    from tomldiary.backends.firestore import FirestoreBackend
+
+    FIRESTORE_AVAILABLE = True
+except ImportError:
+    FIRESTORE_AVAILABLE = False
+
 
 class TestLocalBackend:
     """Test LocalBackend functionality."""
@@ -180,3 +188,257 @@ class TestLocalBackend:
 
         assert loaded == content
         assert len(loaded) > 500000  # Verify it's actually large
+
+
+@pytest.mark.skipif(not FIRESTORE_AVAILABLE, reason="Firestore dependencies not installed")
+class TestFirestoreBackend:
+    """
+    Test FirestoreBackend functionality.
+
+    Note: These tests are skipped if Firestore dependencies are not installed.
+    To run these tests, install with: uv add 'tomldiary[firestore]'
+
+    These tests use a mock/in-memory approach to avoid requiring live Firestore credentials.
+    """
+
+    @pytest.fixture
+    def mock_firestore_client(self, monkeypatch):
+        """Create a mock Firestore client for testing."""
+
+        # This is a simple in-memory mock for unit tests
+        # For integration tests, use the scripts/test_firestore.py with live Firestore
+        class MockDocument:
+            def __init__(self, data=None):
+                self._data = data
+                self.exists = data is not None
+
+            def to_dict(self):
+                return self._data if self._data else {}
+
+            def get(self):
+                return self
+
+        class MockDocumentReference:
+            def __init__(self, storage, path):
+                self.storage = storage
+                self.path = path
+
+            def get(self):
+                return MockDocument(self.storage.get(self.path))
+
+            def set(self, data):
+                self.storage[self.path] = data
+
+            def delete(self):
+                if self.path in self.storage:
+                    del self.storage[self.path]
+
+        class MockCollectionReference:
+            def __init__(self, storage, base_path):
+                self.storage = storage
+                self.base_path = base_path
+
+            def document(self, doc_id):
+                path = f"{self.base_path}/{doc_id}"
+                return MockDocumentReference(self.storage, path)
+
+        class MockClient:
+            def __init__(self):
+                self.storage = {}
+
+            def collection(self, name):
+                return MockCollectionReference(self.storage, name)
+
+        mock_client = MockClient()
+
+        # Patch the Firestore client creation
+        def mock_client_init(*args, **kwargs):
+            return mock_client
+
+        monkeypatch.setattr("google.cloud.firestore.Client", mock_client_init)
+
+        return mock_client
+
+    @pytest.fixture
+    def backend(self, mock_firestore_client):
+        """Create a FirestoreBackend instance with mocked client."""
+        # Use even number of segments for base_path
+        backend = FirestoreBackend(project_id="test-project", base_path="test/data")
+        # Replace the client with our mock
+        backend.db = mock_firestore_client
+        return backend
+
+    @pytest.mark.asyncio
+    async def test_save_and_load(self, backend):
+        """Test basic save and load functionality."""
+        user_id = "test_user"
+        kind = "preferences"
+        content = "test content"
+
+        # Save content
+        await backend.save(user_id, kind, content)
+
+        # Load content
+        loaded = await backend.load(user_id, kind)
+        assert loaded == content
+
+    @pytest.mark.asyncio
+    async def test_load_nonexistent(self, backend):
+        """Test loading non-existent file returns None."""
+        result = await backend.load("nonexistent", "preferences")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_multiple_users(self, backend):
+        """Test storing data for multiple users independently."""
+        user1_content = "user1 preferences"
+        user2_content = "user2 preferences"
+
+        await backend.save("user1", "preferences", user1_content)
+        await backend.save("user2", "preferences", user2_content)
+
+        loaded1 = await backend.load("user1", "preferences")
+        loaded2 = await backend.load("user2", "preferences")
+
+        assert loaded1 == user1_content
+        assert loaded2 == user2_content
+
+    @pytest.mark.asyncio
+    async def test_multiple_kinds(self, backend):
+        """Test storing different kinds for same user."""
+        user_id = "test_user"
+        prefs_content = "preferences content"
+        convs_content = "conversations content"
+
+        await backend.save(user_id, "preferences", prefs_content)
+        await backend.save(user_id, "conversations", convs_content)
+
+        loaded_prefs = await backend.load(user_id, "preferences")
+        loaded_convs = await backend.load(user_id, "conversations")
+
+        assert loaded_prefs == prefs_content
+        assert loaded_convs == convs_content
+
+    @pytest.mark.asyncio
+    async def test_update_existing(self, backend):
+        """Test updating existing content."""
+        user_id = "test_user"
+        kind = "preferences"
+
+        # Save initial content
+        await backend.save(user_id, kind, "initial")
+        loaded = await backend.load(user_id, kind)
+        assert loaded == "initial"
+
+        # Update content
+        await backend.save(user_id, kind, "updated")
+        loaded = await backend.load(user_id, kind)
+        assert loaded == "updated"
+
+    @pytest.mark.asyncio
+    async def test_unicode_content(self, backend):
+        """Test saving and loading unicode content."""
+        user_id = "test_user"
+        kind = "preferences"
+        content = "🍕 I love pizza! 日本語 test éñçødîng"
+
+        await backend.save(user_id, kind, content)
+        loaded = await backend.load(user_id, kind)
+
+        assert loaded == content
+
+    @pytest.mark.asyncio
+    async def test_empty_content(self, backend):
+        """Test saving and loading empty content."""
+        user_id = "test_user"
+        kind = "preferences"
+        content = ""
+
+        await backend.save(user_id, kind, content)
+        loaded = await backend.load(user_id, kind)
+
+        assert loaded == content
+
+    @pytest.mark.asyncio
+    async def test_exists_utility(self, backend):
+        """Test the exists() utility method."""
+        user_id = "test_user"
+        kind = "preferences"
+
+        # Should not exist initially
+        exists = await backend.exists(user_id, kind)
+        assert exists is False
+
+        # Save and check existence
+        await backend.save(user_id, kind, "content")
+        exists = await backend.exists(user_id, kind)
+        assert exists is True
+
+    @pytest.mark.asyncio
+    async def test_delete_utility(self, backend):
+        """Test the delete() utility method."""
+        user_id = "test_user"
+        kind = "preferences"
+
+        # Save content
+        await backend.save(user_id, kind, "content")
+        assert await backend.exists(user_id, kind) is True
+
+        # Delete
+        await backend.delete(user_id, kind)
+        assert await backend.exists(user_id, kind) is False
+
+    @pytest.mark.asyncio
+    async def test_base_path_validation(self):
+        """Test that base_path validation works correctly."""
+        # Even number of segments should work
+        backend = FirestoreBackend(project_id="test", base_path="level1/level2")
+        assert backend.base_path == "level1/level2"
+
+        # Odd number of segments should raise ValueError
+        with pytest.raises(ValueError, match="EVEN number of path segments"):
+            FirestoreBackend(project_id="test", base_path="level1")
+
+        # Empty or single trailing slash should still validate
+        backend = FirestoreBackend(project_id="test", base_path="level1/level2/")
+        assert backend.base_path == "level1/level2"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_saves_same_path(self, backend):
+        """Test concurrent saves to the same path."""
+        user_id = "test_user"
+        kind = "preferences"
+
+        # Create multiple concurrent save tasks for the same path
+        tasks = []
+        for i in range(10):
+            task = asyncio.create_task(backend.save(user_id, kind, f"content_{i}"))
+            tasks.append(task)
+
+        # Wait for all to complete
+        await asyncio.gather(*tasks)
+
+        # Load final content - should be one of the contents
+        result = await backend.load(user_id, kind)
+        assert result is not None
+        assert result.startswith("content_")
+
+    @pytest.mark.asyncio
+    async def test_concurrent_saves_different_paths(self, backend):
+        """Test concurrent saves to different paths work in parallel."""
+        tasks = []
+
+        # Create saves for different users/kinds
+        for i in range(5):
+            for kind in ["preferences", "conversations"]:
+                task = asyncio.create_task(backend.save(f"user_{i}", kind, f"content_{i}_{kind}"))
+                tasks.append(task)
+
+        # Wait for all to complete
+        await asyncio.gather(*tasks)
+
+        # Verify all were saved correctly
+        for i in range(5):
+            for kind in ["preferences", "conversations"]:
+                result = await backend.load(f"user_{i}", kind)
+                assert result == f"content_{i}_{kind}"

@@ -84,6 +84,37 @@ python compaction_demo_quick.py          # Quick demo
 python compaction_agent_stress_test.py   # Full test suite
 ```
 
+### 🔍 Observability Demo (`observability_demo.py`)
+Production-ready monitoring and health check patterns for distributed deployments.
+
+**Features:**
+- Real-time queue statistics and worker utilization
+- Health check implementation with alert conditions
+- Burst load simulation and backpressure handling
+- Production monitoring patterns (queue depth, error rates, throughput)
+
+**Run:**
+```bash
+cd examples
+python observability_demo.py
+```
+
+### ☁️ Firestore Backend (`firestore_example.py`)
+Demonstrates cloud storage using Google Cloud Firestore instead of local files.
+
+**Features:**
+- Multi-region cloud storage with automatic replication
+- Production-ready backend for distributed deployments
+- Requires `tomldiary[firestore]` installation
+
+**Run:**
+```bash
+uv add 'tomldiary[firestore]'
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+cd examples
+python firestore_example.py
+```
+
 ## Preference Schema
 
 These examples use the comprehensive `CulinaryPrefTable` with detailed AI instructions for each category:
@@ -134,13 +165,16 @@ These examples use the comprehensive `CulinaryPrefTable` with detailed AI instru
 - **Conversation flow**: Multi-turn conversations with message history
 - **Production-ready**: Comprehensive preference schema with detailed instructions
 
-## File Structure
+## All Examples
 
 - `simple_example.py` - **Educational showcase** (start here!)
 - `example_cooking_show.py` - Advanced AI-powered cooking show simulation
 - `extractor_agent_example.py` - Custom extractor with manual Agent setup
 - `compaction_demo_quick.py` - Quick compaction demonstration
 - `compaction_agent_stress_test.py` - Comprehensive compaction validation
+- `observability_demo.py` - Production monitoring and health check patterns
+- `firestore_example.py` - Cloud storage with Google Cloud Firestore
+- `dietary_preferences.py` - Alternative preference schema example
 - `culinary_prefs.py` - Comprehensive preference schema with AI instructions
 - `memory_*/` - Generated TOML files (created when examples run)
 

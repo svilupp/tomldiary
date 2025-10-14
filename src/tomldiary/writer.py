@@ -37,10 +37,17 @@ class MemoryWriter:
         ]
         self._running = True
 
+        # Observability metrics
+        self._submitted_count = 0
+        self._completed_count = 0
+        self._failed_count = 0
+        self._active_workers = 0
+
     async def submit(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str):
         """Submit a memory update request to the queue (may block on backpressure)."""
         if not self._running:
             raise RuntimeError("MemoryWriter is closed")
+        self._submitted_count += 1
         await self.q.put((user_id, session_id, user_msg, assistant_msg))
 
     async def _worker(self, worker_id: int):
@@ -56,11 +63,15 @@ class MemoryWriter:
                 except TimeoutError:
                     continue
 
+                self._active_workers += 1
                 try:
                     await self._process(user_id, session_id, user_msg, assistant_msg)
+                    self._completed_count += 1
                 except Exception as e:
+                    self._failed_count += 1
                     log.exception(f"Worker {worker_id} failed to process memory update: {e}")
                 finally:
+                    self._active_workers -= 1
                     self.q.task_done()
         except asyncio.CancelledError:
             log.debug(f"Memory worker {worker_id} cancelled")
@@ -70,6 +81,53 @@ class MemoryWriter:
     async def _process(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str):
         """Process a single memory update."""
         await self.diary.update_memory(user_id, session_id, user_msg, assistant_msg)
+
+    def stats(self) -> dict[str, int | float | bool]:
+        """
+        Get current writer statistics for observability and monitoring.
+
+        Returns:
+            Dictionary containing:
+            - queue_size: Current number of items in queue
+            - queue_capacity: Maximum queue size
+            - queue_utilization: Queue fullness (0.0 to 1.0)
+            - total_workers: Number of worker tasks
+            - active_workers: Workers currently processing tasks
+            - idle_workers: Workers waiting for tasks
+            - submitted: Total tasks submitted since start
+            - completed: Total tasks completed successfully
+            - failed: Total tasks that raised exceptions
+            - pending: Current tasks in flight (submitted - completed - failed)
+            - error_rate: Ratio of failed to submitted tasks
+            - is_running: Whether writer is accepting new tasks
+        """
+        queue_size = self.q.qsize()
+        queue_capacity = self.q.maxsize
+        submitted = self._submitted_count
+        completed = self._completed_count
+        failed = self._failed_count
+        total_workers = len(self.workers)
+        active_workers = self._active_workers
+
+        return {
+            "queue_size": queue_size,
+            "queue_capacity": queue_capacity,
+            "queue_utilization": queue_size / queue_capacity if queue_capacity > 0 else 0.0,
+            "total_workers": total_workers,
+            "active_workers": active_workers,
+            "idle_workers": total_workers - active_workers,
+            "submitted": submitted,
+            "completed": completed,
+            "failed": failed,
+            "pending": submitted - completed - failed,
+            "error_rate": failed / max(submitted, 1),
+            "is_running": self._running,
+        }
+
+    @property
+    def is_running(self) -> bool:
+        """Check if writer is currently accepting tasks."""
+        return self._running
 
     async def close(self):
         """Gracefully shutdown the writer and all workers."""

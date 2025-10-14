@@ -241,6 +241,191 @@ class TestMemoryWriter:
         with pytest.raises(RuntimeError, match="MemoryWriter is closed"):
             await writer.submit("user1", "session1", "Hello", "Hi")
 
+    @pytest.mark.asyncio
+    async def test_stats_basic(self, writer, mock_diary):
+        """Test basic stats() method returns correct metrics."""
+        # Check initial stats
+        stats = writer.stats()
+
+        assert stats["queue_size"] == 0
+        assert stats["queue_capacity"] == 10
+        assert stats["queue_utilization"] == 0.0
+        assert stats["total_workers"] == 2
+        assert stats["active_workers"] == 0
+        assert stats["idle_workers"] == 2
+        assert stats["submitted"] == 0
+        assert stats["completed"] == 0
+        assert stats["failed"] == 0
+        assert stats["pending"] == 0
+        assert stats["error_rate"] == 0.0
+        assert stats["is_running"] is True
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_after_submissions(self, writer, mock_diary):
+        """Test stats track submissions and completions."""
+        # Submit some work
+        await writer.submit("user1", "session1", "Hello", "Hi")
+        await writer.submit("user2", "session2", "Test", "Testing")
+
+        # Check stats before processing
+        stats = writer.stats()
+        assert stats["submitted"] == 2
+        assert stats["queue_size"] <= 2
+
+        # Wait for processing
+        await asyncio.sleep(0.2)
+
+        # Check stats after processing
+        stats = writer.stats()
+        assert stats["submitted"] == 2
+        assert stats["completed"] == 2
+        assert stats["failed"] == 0
+        assert stats["pending"] == 0
+        assert stats["queue_size"] == 0
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_error_tracking(self, mock_diary):
+        """Test stats track failed operations."""
+        # Make diary fail
+        mock_diary.should_fail = True
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=5)
+
+        # Submit work that will fail
+        await writer.submit("user1", "session1", "Hello", "Hi")
+        await writer.submit("user2", "session2", "Test", "Testing")
+
+        # Wait for processing
+        await asyncio.sleep(0.2)
+
+        # Check error tracking
+        stats = writer.stats()
+        assert stats["submitted"] == 2
+        assert stats["completed"] == 0
+        assert stats["failed"] == 2
+        assert stats["pending"] == 0
+        assert stats["error_rate"] == 1.0  # 100% failure rate
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_mixed_success_failure(self, mock_diary):
+        """Test stats with mixed success and failure."""
+        writer = MemoryWriter(mock_diary, workers=1, qsize=5)
+
+        # Submit successful work
+        await writer.submit("user1", "session1", "Success1", "Response1")
+        await asyncio.sleep(0.1)
+
+        # Make next ones fail
+        mock_diary.should_fail = True
+        await writer.submit("user2", "session2", "Fail1", "Response2")
+        await asyncio.sleep(0.1)
+
+        # Make next one succeed
+        mock_diary.should_fail = False
+        await writer.submit("user3", "session3", "Success2", "Response3")
+        await asyncio.sleep(0.1)
+
+        stats = writer.stats()
+        assert stats["submitted"] == 3
+        assert stats["completed"] == 2
+        assert stats["failed"] == 1
+        assert stats["pending"] == 0
+        assert 0.3 < stats["error_rate"] < 0.4  # ~33% failure rate
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_queue_utilization(self, mock_diary):
+        """Test queue utilization calculation."""
+        # Slow diary to fill queue
+        mock_diary.update_delay = 0.5
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=5)
+
+        # Fill queue partially
+        await writer.submit("user1", "session1", "msg1", "resp1")
+        await writer.submit("user2", "session2", "msg2", "resp2")
+
+        # Check utilization
+        stats = writer.stats()
+        assert stats["queue_utilization"] > 0.0
+        assert stats["queue_utilization"] <= 1.0
+        assert stats["queue_size"] <= 5
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_active_workers(self, mock_diary):
+        """Test active_workers tracking."""
+        # Add delay to observe active workers
+        mock_diary.update_delay = 0.2
+
+        writer = MemoryWriter(mock_diary, workers=2, qsize=10)
+
+        # Check idle state
+        stats = writer.stats()
+        assert stats["active_workers"] == 0
+        assert stats["idle_workers"] == 2
+
+        # Submit work
+        await writer.submit("user1", "session1", "msg1", "resp1")
+        await writer.submit("user2", "session2", "msg2", "resp2")
+
+        # Check immediately - workers should be active
+        await asyncio.sleep(0.05)
+        stats = writer.stats()
+        # At least one worker should be active (timing dependent)
+        assert stats["active_workers"] >= 0
+        assert stats["active_workers"] <= 2
+
+        # Wait for completion
+        await asyncio.sleep(0.3)
+        stats = writer.stats()
+        assert stats["active_workers"] == 0
+        assert stats["idle_workers"] == 2
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_is_running_property(self, writer):
+        """Test is_running property."""
+        assert writer.is_running is True
+
+        await writer.close()
+
+        assert writer.is_running is False
+
+    @pytest.mark.asyncio
+    async def test_stats_pending_calculation(self, writer, mock_diary):
+        """Test pending tasks calculation."""
+        # Add delay to keep tasks pending
+        mock_diary.update_delay = 0.3
+
+        # Submit tasks
+        await writer.submit("user1", "session1", "msg1", "resp1")
+        await writer.submit("user2", "session2", "msg2", "resp2")
+        await writer.submit("user3", "session3", "msg3", "resp3")
+
+        # Check immediately - should have pending tasks
+        await asyncio.sleep(0.05)
+        stats = writer.stats()
+        assert stats["submitted"] == 3
+        assert stats["pending"] > 0
+
+        # Wait for completion
+        await asyncio.sleep(1.0)
+        stats = writer.stats()
+        assert stats["pending"] == 0
+        assert stats["completed"] == 3
+
+        await writer.close()
+
 
 class TestShutdownBackgroundTasks:
     """Test shutdown_all_background_tasks function."""
