@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.2.0] - 2025-10-14
+
+### Added
+- Added `FirestoreBackend` to support Google Cloud Firestore for saving memories (see `examples/firestore_example.py` for usage or `scripts/firestore_test_connection.py` for testing your setup)
+- Built-in observability for `MemoryWriter`: added `stats()` method and `is_running` property and metrics (queue depth, worker utilization, throughput, error rates)
+
 ## [0.1.0] - 2025-10-12
 
 ### Added

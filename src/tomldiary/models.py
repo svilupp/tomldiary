@@ -19,8 +19,8 @@ class MetaInfo(BaseModel):
 # ───────── preference atom ─────────
 class PreferenceItem(BaseModel):
     """
-    text       : user-friendly sentence
-    contexts   : short phrases giving examples
+    text       : user-friendly description of the preference/facts learned
+    contexts   : short phrases capturing the context in which the preference was mentioned
     count      : engine-managed hit counter (prefixed with _ in TOML)
     created    : ISO timestamp of first creation (engine-managed, prefixed with _ in TOML)
     updated    : ISO timestamp of last update (engine-managed, prefixed with _ in TOML)
@@ -45,7 +45,7 @@ class ConversationItem(BaseModel):
     created   : session start (prefixed with _ in TOML)
     updated   : last update timestamp (prefixed with _ in TOML)
     turns     : total user↔assistant pairs (prefixed with _ in TOML)
-    summary   : rolling abstract
+    summary   : rolling abstract/summary of the conversation so far
     keywords  : key nouns / verbs
     """
 

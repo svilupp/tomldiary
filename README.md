@@ -11,8 +11,18 @@ TOMLDiary is a dead-simple, customizable memory system for agentic applications.
 - **Smart deduplication** – prevents duplicate preferences with FuzzyWuzzy similarity detection (70% threshold).
 - **Enhanced limit enforcement** – visual indicators and pre-flight checking prevent failed operations.
 - **Force creation mechanism** – bypass similarity detection when needed with `id="new"` parameter.
+- **Built-in observability** – comprehensive metrics for monitoring queue health, throughput, and error rates in production.
 - **Minimal overhead** – lightweight design, backend agnostic and easy to integrate.
 - **Atomic, safe writes** – ensures data integrity with proper file locking.
+
+## Storage Backends
+
+TOMLDiary supports multiple storage backends for different deployment scenarios:
+
+- **LocalBackend** (included) – File-based storage with path-level locking. Perfect for development, local applications, and single-server deployments.
+- **FirestoreBackend** (optional) – Google Cloud Firestore for cloud-based storage with multi-region replication, automatic scaling, and real-time sync. Requires `tomldiary[firestore]` installation.
+
+See the [Backend Options](#backend-options) section below for configuration examples.
 
 ## Installation
 
@@ -20,6 +30,16 @@ Requires Python 3.11+
 
 ```bash
 uv add tomldiary pydantic-ai
+```
+
+### Optional: Firestore Backend
+
+To use the Firestore backend for cloud storage:
+
+```bash
+uv add 'tomldiary[firestore]'
+# or with pip
+pip install 'tomldiary[firestore]'
 ```
 
 ## Quick Start
@@ -142,15 +162,61 @@ The system includes enhanced tools for intelligent preference management:
 
 The library supports different storage backends:
 
-```python
-# Local filesystem (default)
-from tomldiary.backends import LocalBackend
-backend = LocalBackend(Path("./memories"))
+#### Local Filesystem (Default)
 
-# S3 backend (implement S3Backend)
+```python
+from pathlib import Path
+from tomldiary.backends import LocalBackend
+
+backend = LocalBackend(Path("./memories"))
+```
+
+#### Firestore (Cloud Storage)
+
+Install first: `uv add 'tomldiary[firestore]'`
+
+```python
+from tomldiary.backends import FirestoreBackend
+
+# Using default credentials (Application Default Credentials)
+backend = FirestoreBackend(
+    project_id="my-gcp-project",
+    base_path="app/memory"  # Must have EVEN number of segments
+)
+
+# Or with explicit credentials
+backend = FirestoreBackend(
+    project_id="my-gcp-project",
+    base_path="app/memory",
+    credentials_path="/path/to/service-account.json",
+    database="my-database"  # Optional, defaults to "(default)"
+)
+```
+
+**Important**: The `base_path` must have an **even number** of segments due to Firestore's collection/document structure requirements. Examples:
+- ✅ `"users/data"` (2 segments)
+- ✅ `"app/memory"` (2 segments)
+- ✅ `"prod/app/v1/memory"` (4 segments)
+- ❌ `"users"` (1 segment - will raise ValueError)
+- ❌ `"app/prod/memory"` (3 segments - will raise ValueError)
+
+**Firestore Structure:**
+```
+{base_path}/
+  {user_id}/
+    preferences.toml    # Document with TOML content
+    conversations.toml  # Document with TOML content
+```
+
+Test your setup with `uv run --extra firestore scripts/firestore_test_connection.py` or `uv run --extra firestore examples/firestore_example.py`.
+
+#### Other Backends (Custom Implementation)
+
+```python
+# S3 backend (implement your own S3Backend)
 # backend = S3Backend(bucket="my-memories")
 
-# Redis backend (implement RedisBackend)  
+# Redis backend (implement your own RedisBackend)
 # backend = RedisBackend(host="localhost")
 ```
 
@@ -160,11 +226,81 @@ backend = LocalBackend(Path("./memories"))
 # Configure the background writer
 writer = MemoryWriter(
     diary=diary,
-    workers=3,        # Number of background workers
-    qsize=100,        # Queue size
-    retry_limit=3,    # Max retries on failure
-    retry_delay=1.0   # Delay between retries
+    workers=8,        # Number of background workers (default: 8 or 2×CPU)
+    qsize=1000,       # Queue size (default: 1000)
 )
+```
+
+### Observability and Monitoring
+
+The `MemoryWriter` includes built-in observability for production deployments:
+
+```python
+# Get real-time statistics
+stats = writer.stats()
+
+# Returns comprehensive metrics:
+{
+    "queue_size": 5,              # Current items in queue
+    "queue_capacity": 1000,       # Maximum queue size
+    "queue_utilization": 0.005,   # Queue fullness (0.0 to 1.0)
+    "total_workers": 8,           # Number of worker tasks
+    "active_workers": 2,          # Workers currently processing
+    "idle_workers": 6,            # Workers waiting for tasks
+    "submitted": 1247,            # Total tasks submitted
+    "completed": 1240,            # Total tasks completed
+    "failed": 2,                  # Total tasks failed
+    "pending": 5,                 # Tasks in flight
+    "error_rate": 0.0016,         # Failure ratio
+    "is_running": True            # Accepting new tasks
+}
+
+# Check if writer is running
+if writer.is_running:
+    await writer.submit(...)
+```
+
+#### Production Use Cases
+
+**Health Check Endpoints:**
+```python
+@app.get("/health/memory")
+async def memory_health():
+    stats = writer.stats()
+    status = "healthy" if stats["queue_utilization"] < 0.9 else "degraded"
+    return {"status": status, "metrics": stats}
+```
+
+**Monitoring and Alerting:**
+```python
+# Alert on queue backpressure
+stats = writer.stats()
+if stats["queue_utilization"] > 0.8:
+    alert("MemoryWriter queue depth high")
+
+# Alert on error rate
+if stats["error_rate"] > 0.1:
+    alert(f"MemoryWriter error rate: {stats['error_rate']:.1%}")
+
+# Alert on worker saturation
+if stats["idle_workers"] == 0:
+    alert("All MemoryWriter workers busy")
+```
+
+**Graceful Degradation:**
+```python
+# Reject requests if queue is near capacity
+stats = writer.stats()
+if stats["queue_utilization"] > 0.95:
+    raise HTTPException(503, "Memory writer at capacity")
+```
+
+**Integration with Logfire:**
+```python
+import logfire
+
+# Log periodic metrics
+logfire.info("memory_writer_stats", **writer.stats())
 ```
 
 ## API Reference
@@ -214,8 +350,9 @@ counts and turn statistics so triggers fire immediately once compaction is re-en
 Background queue for non-blocking writes:
 
 - `submit(user_id, session_id, user_message, assistant_response)`: Queue memory update
+- `stats()`: Get comprehensive statistics for monitoring and observability
+- `is_running`: Property to check if writer is accepting tasks
 - `close()`: Graceful shutdown
-- `failed_count()`: Number of failed operations
 
 ### Models
 
@@ -240,6 +377,14 @@ uv sync --group dev
 
 # Run tests
 pytest
+
+# Run tests with Firestore backend (optional)
+uv add 'tomldiary[firestore]'
+pytest  # Firestore tests will be included automatically
+
+# Test Firestore backend with live credentials
+# Set environment variables: FIREBASE_ADMIN_CREDS, FIREBASE_ADMIN_PROJECT_ID, FIREBASE_WINDOW_SHOP_DB_NAME
+python scripts/test_firestore.py
 
 # Format code
 ruff format .
