@@ -189,6 +189,175 @@ class TestLocalBackend:
         assert loaded == content
         assert len(loaded) > 500000  # Verify it's actually large
 
+    @pytest.mark.asyncio
+    async def test_exists_for_existing_file(self, backend):
+        """Test exists() returns True for existing file."""
+        user_id = "test_user"
+        kind = "preferences"
+        content = "test content"
+
+        # Save file
+        await backend.save(user_id, kind, content)
+
+        # Check existence
+        assert await backend.exists(user_id, kind) is True
+
+    @pytest.mark.asyncio
+    async def test_exists_for_nonexistent_file(self, backend):
+        """Test exists() returns False for nonexistent file."""
+        assert await backend.exists("nonexistent", "preferences") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_existing_file(self, backend):
+        """Test delete() removes existing file."""
+        user_id = "test_user"
+        kind = "preferences"
+
+        # Save file
+        await backend.save(user_id, kind, "test content")
+        assert await backend.exists(user_id, kind) is True
+
+        # Delete file
+        await backend.delete(user_id, kind)
+        assert await backend.exists(user_id, kind) is False
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_file_is_idempotent(self, backend):
+        """Test delete() succeeds for nonexistent file."""
+        # Should not raise exception
+        await backend.delete("nonexistent", "preferences")
+
+    @pytest.mark.asyncio
+    async def test_delete_preserves_other_kinds(self, backend):
+        """Test delete() only removes specified kind."""
+        user_id = "test_user"
+
+        # Save both kinds
+        await backend.save(user_id, "preferences", "prefs")
+        await backend.save(user_id, "conversations", "convs")
+
+        # Delete preferences only
+        await backend.delete(user_id, "preferences")
+
+        # Verify preferences deleted but conversations remain
+        assert await backend.exists(user_id, "preferences") is False
+        assert await backend.exists(user_id, "conversations") is True
+
+    @pytest.mark.asyncio
+    async def test_delete_user_removes_all_data(self, backend):
+        """Test delete_user() removes all user documents."""
+        user_id = "test_user"
+
+        # Save multiple kinds
+        await backend.save(user_id, "preferences", "prefs")
+        await backend.save(user_id, "conversations", "convs")
+
+        # Delete user
+        await backend.delete_user(user_id)
+
+        # Verify all data removed
+        assert await backend.exists(user_id, "preferences") is False
+        assert await backend.exists(user_id, "conversations") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_user_is_idempotent(self, backend):
+        """Test delete_user() succeeds for nonexistent user."""
+        # Should not raise exception
+        await backend.delete_user("nonexistent_user")
+
+    @pytest.mark.asyncio
+    async def test_delete_user_removes_directory(self, backend, temp_dir):
+        """Test delete_user() removes entire user directory."""
+        user_id = "test_user"
+
+        # Save data
+        await backend.save(user_id, "preferences", "test")
+
+        # Verify directory exists
+        user_dir = temp_dir / user_id
+        assert user_dir.exists() is True
+
+        # Delete user
+        await backend.delete_user(user_id)
+
+        # Verify directory removed
+        assert user_dir.exists() is False
+
+    @pytest.mark.asyncio
+    async def test_list_users_empty(self, backend):
+        """Test list_users() returns empty list when no users."""
+        users = await backend.list_users()
+        assert users == []
+
+    @pytest.mark.asyncio
+    async def test_list_users_single_user(self, backend):
+        """Test list_users() returns single user."""
+        await backend.save("alice", "preferences", "test")
+
+        users = await backend.list_users()
+        assert users == ["alice"]
+
+    @pytest.mark.asyncio
+    async def test_list_users_multiple_users(self, backend):
+        """Test list_users() returns all users."""
+        # Create multiple users
+        for user in ["alice", "bob", "charlie"]:
+            await backend.save(user, "preferences", f"{user} data")
+
+        users = await backend.list_users()
+        assert set(users) == {"alice", "bob", "charlie"}
+
+    @pytest.mark.asyncio
+    async def test_list_users_ignores_files(self, backend, temp_dir):
+        """Test list_users() only returns directories."""
+        # Create a user
+        await backend.save("alice", "preferences", "test")
+
+        # Create a file in base_path (not a user directory)
+        random_file = temp_dir / "random.txt"
+        random_file.write_text("not a user")
+
+        users = await backend.list_users()
+        assert users == ["alice"]
+        assert "random.txt" not in users
+
+    @pytest.mark.asyncio
+    async def test_delete_preserves_other_users(self, backend):
+        """Test delete_user() only affects specified user."""
+        # Create two users
+        await backend.save("alice", "preferences", "alice data")
+        await backend.save("bob", "preferences", "bob data")
+
+        # Delete alice
+        await backend.delete_user("alice")
+
+        # Verify alice removed but bob remains
+        assert await backend.exists("alice", "preferences") is False
+        assert await backend.exists("bob", "preferences") is True
+
+        users = await backend.list_users()
+        assert users == ["bob"]
+
+    @pytest.mark.asyncio
+    async def test_concurrent_deletes(self, backend):
+        """Test concurrent delete operations."""
+        user_id = "test_user"
+
+        # Create file
+        await backend.save(user_id, "preferences", "test")
+
+        # Multiple concurrent deletes (idempotency test)
+        tasks = [
+            asyncio.create_task(backend.delete(user_id, "preferences"))
+            for _ in range(10)
+        ]
+
+        # Should all succeed without error
+        await asyncio.gather(*tasks)
+
+        # Verify deleted
+        assert await backend.exists(user_id, "preferences") is False
+
 
 @pytest.mark.skipif(not FIRESTORE_AVAILABLE, reason="Firestore dependencies not installed")
 class TestFirestoreBackend:
@@ -222,6 +391,8 @@ class TestFirestoreBackend:
             def __init__(self, storage, path):
                 self.storage = storage
                 self.path = path
+                self.reference = self
+                self.id = path.split("/")[-1] if path else ""
 
             def get(self):
                 return MockDocument(self.storage.get(self.path))
@@ -238,14 +409,45 @@ class TestFirestoreBackend:
                 subcollection_path = f"{self.path}/{name}"
                 return MockCollectionReference(self.storage, subcollection_path)
 
+            def collections(self):
+                # Return all subcollections under this document
+                prefix = f"{self.path}/"
+                collections = set()
+                for key in self.storage:
+                    if key.startswith(prefix):
+                        # Extract collection name (first segment after prefix)
+                        remainder = key[len(prefix) :]
+                        parts = remainder.split("/")
+                        if len(parts) >= 1:
+                            collections.add(parts[0])
+
+                # Return mock collections
+                return [
+                    MockCollectionReference(self.storage, f"{self.path}/{coll}")
+                    for coll in collections
+                ]
+
         class MockCollectionReference:
             def __init__(self, storage, base_path):
                 self.storage = storage
                 self.base_path = base_path
+                self.id = base_path.split("/")[-1] if base_path else ""
 
             def document(self, doc_id):
                 path = f"{self.base_path}/{doc_id}"
                 return MockDocumentReference(self.storage, path)
+
+            def stream(self):
+                # Return all documents in this collection
+                prefix = f"{self.base_path}/"
+                docs = []
+                for key in self.storage:
+                    if key.startswith(prefix):
+                        # Check if this is a direct child (no more slashes after prefix)
+                        remainder = key[len(prefix) :]
+                        if "/" not in remainder:
+                            docs.append(MockDocumentReference(self.storage, key))
+                return docs
 
         class MockClient:
             def __init__(self):
@@ -447,3 +649,34 @@ class TestFirestoreBackend:
             for kind in ["preferences", "conversations"]:
                 result = await backend.load(f"user_{i}", kind)
                 assert result == f"content_{i}_{kind}"
+
+    @pytest.mark.asyncio
+    async def test_delete_user_utility(self, backend):
+        """Test the delete_user() utility method."""
+        user_id = "test_user"
+
+        # Save multiple kinds
+        await backend.save(user_id, "preferences", "prefs")
+        await backend.save(user_id, "conversations", "convs")
+
+        # Delete user
+        await backend.delete_user(user_id)
+
+        # Verify all data removed
+        assert await backend.exists(user_id, "preferences") is False
+        assert await backend.exists(user_id, "conversations") is False
+
+    @pytest.mark.asyncio
+    async def test_list_users_utility(self, backend):
+        """Test the list_users() utility method."""
+        # Initially empty
+        users = await backend.list_users()
+        assert users == []
+
+        # Add users
+        await backend.save("alice", "preferences", "data")
+        await backend.save("bob", "preferences", "data")
+
+        # List returns both
+        users = await backend.list_users()
+        assert set(users) == {"alice", "bob"}

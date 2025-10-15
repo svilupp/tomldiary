@@ -11,6 +11,20 @@ The Firestore backend allows you to store TOMLDiary data in Google Cloud Firesto
 - Built-in security rules and authentication
 - Real-time synchronization capabilities
 
+### Interface Parity
+
+FirestoreBackend implements the complete TOMLDiary backend interface:
+
+✅ All 6 standard methods implemented
+✅ Atomic operations (no locking needed)
+✅ Idempotent operations
+✅ Comprehensive error handling
+✅ Production-ready logging
+
+Unlike LocalBackend which uses path-level locking, FirestoreBackend relies on Firestore's native atomic operations for concurrent write safety. Both backends are fully interchangeable - you can use LocalBackend for development and FirestoreBackend for production with zero code changes.
+
+For complete interface specifications, see [Backend Interface Documentation](backend-interface.md).
+
 ## Installation
 
 Install TOMLDiary with Firestore support:

@@ -3,6 +3,10 @@ import os
 import weakref
 from pathlib import Path
 
+from ..logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class LocalBackend:
     """File-based backend with path-level locking for concurrent access."""
@@ -56,3 +60,46 @@ class LocalBackend:
                 if temp_path.exists():
                     await asyncio.to_thread(temp_path.unlink)
                 raise
+
+    async def exists(self, user_id: str, kind: str) -> bool:
+        """Check if a document exists for a user."""
+        # Don't use _get_file_path as it creates directories
+        file_path = self.base_path / user_id / f"{kind}.toml"
+        return await asyncio.to_thread(file_path.exists)
+
+    async def delete(self, user_id: str, kind: str) -> None:
+        """Delete a specific document for a user."""
+        # Don't use _get_file_path as it creates directories
+        file_path = self.base_path / user_id / f"{kind}.toml"
+
+        # Get lock for this path to prevent concurrent access
+        async with await self._get_lock(file_path):
+            if await asyncio.to_thread(file_path.exists):
+                await asyncio.to_thread(file_path.unlink)
+                logger.debug(f"Deleted {kind} for user {user_id}")
+            else:
+                logger.debug(f"Delete called but {kind} doesn't exist for user {user_id}")
+
+    async def delete_user(self, user_id: str) -> None:
+        """Delete all data for a user."""
+        user_dir = self.base_path / user_id
+
+        if await asyncio.to_thread(user_dir.exists):
+            import shutil
+
+            await asyncio.to_thread(shutil.rmtree, user_dir)
+            logger.info(f"Deleted all data for user {user_id}")
+        else:
+            logger.debug(f"Delete user called but user {user_id} doesn't exist")
+
+    async def list_users(self) -> list[str]:
+        """List all user IDs with stored data."""
+
+        def _list_user_dirs():
+            """Synchronous helper to list user directories."""
+            if not self.base_path.exists():
+                return []
+
+            return [d.name for d in self.base_path.iterdir() if d.is_dir()]
+
+        return await asyncio.to_thread(_list_user_dirs)

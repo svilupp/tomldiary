@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-10-15
+
+### Updated
+- Backend Interface Standardization: LocalBackend now implements full 6-method interface (`exists`, `delete`, `delete_user`, `list_users`) matching FirestoreBackend for complete interchangeability
+- Comprehensive backend interface documentation with implementation guidelines
+
 ## [0.4.0] - 2025-10-15
 
 ### Changed
