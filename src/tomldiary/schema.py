@@ -129,11 +129,21 @@ def _format_schema_pretty(schema_info: dict, kind: Literal["preferences", "conve
         json_schema = schema_info["json_schema"]
         properties = json_schema.get("properties", {})
 
+        # Map field names to their serialization names (handle aliases)
+        from .models import ConversationItem
+
+        field_aliases = {
+            name: field.serialization_alias or name
+            for name, field in ConversationItem.model_fields.items()
+        }
+
         for i, field in enumerate(fields):
             is_last = i == len(fields) - 1
             prefix = "└──" if is_last else "├──"
 
-            field_schema = properties.get(field, {})
+            # Use the serialization alias to look up in properties
+            serialized_name = field_aliases.get(field, field)
+            field_schema = properties.get(serialized_name, {})
             field_type = field_schema.get("type", "unknown")
             field_desc = field_schema.get("description", "")
 
