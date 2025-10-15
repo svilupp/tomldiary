@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 
 from tomldiary import Diary, MemoryWriter, shutdown_all_background_tasks
 from tomldiary.backends.local import LocalBackend
-from tomldiary.models import PreferenceItem
 from tomldiary.compaction import CompactionConfig
+from tomldiary.models import PreferenceItem
 
 
 # Define a simple preference schema

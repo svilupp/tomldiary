@@ -5,14 +5,15 @@ A fast demonstration of the compaction service with one targeted scenario.
 """
 
 import asyncio
+import os
 from pathlib import Path
+
+from culinary_prefs import CulinaryPrefTable
+from dotenv import load_dotenv
+
 from tomldiary import Diary
 from tomldiary.backends.local import LocalBackend
 from tomldiary.compaction import CompactionConfig
-from culinary_prefs import CulinaryPrefTable
-
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -81,7 +82,7 @@ async def main():
         len(data.get("summary", "")) for data in convs_before.get("conversations", {}).values()
     )
 
-    print(f"\n📊 BEFORE COMPACTION:")
+    print("\n📊 BEFORE COMPACTION:")
     print(f"   • Preferences: {pref_count_before} blocks, {pref_chars_before} chars")
     print(f"   • Conversations: {conv_count_before} blocks, {conv_chars_before} chars")
     print(f"   • Total: {pref_chars_before + conv_chars_before} chars")
@@ -111,7 +112,7 @@ async def main():
         len(data.get("summary", "")) for data in convs_after.get("conversations", {}).values()
     )
 
-    print(f"\n📊 AFTER COMPACTION:")
+    print("\n📊 AFTER COMPACTION:")
     print(f"   • Preferences: {pref_count_after} blocks, {pref_chars_after} chars")
     print(f"   • Conversations: {conv_count_after} blocks, {conv_chars_after} chars")
     print(f"   • Total: {pref_chars_after + conv_chars_after} chars")
@@ -119,7 +120,7 @@ async def main():
     # Calculate reductions
     if pref_chars_before > 0:
         pref_reduction = (pref_chars_before - pref_chars_after) / pref_chars_before * 100
-        print(f"\n✨ COMPRESSION:")
+        print("\n✨ COMPRESSION:")
         print(
             f"   • Preference chars: {pref_chars_before} → {pref_chars_after} ({pref_reduction:.1f}% reduction)"
         )
@@ -128,7 +129,7 @@ async def main():
         print(f"   • Preference blocks: {pref_count_before} → {pref_count_after}")
 
     # Show what survived
-    print(f"\n📄 RESULTING PREFERENCES:")
+    print("\n📄 RESULTING PREFERENCES:")
     for category, items in prefs_after.get("preferences", {}).items():
         for pref_id, data in items.items():
             text = data.get("text", "")
@@ -137,8 +138,8 @@ async def main():
     if not prefs_after.get("preferences"):
         print("   (All preferences were compacted/consolidated)")
 
-    print(f"\n📄 SAMPLE CONVERSATIONS (first 3):")
-    for i, (session_id, data) in enumerate(list(convs_after.get("conversations", {}).items())[:3]):
+    print("\n📄 SAMPLE CONVERSATIONS (first 3):")
+    for _i, (session_id, data) in enumerate(list(convs_after.get("conversations", {}).items())[:3]):
         summary = data.get("summary", "")
         keywords = data.get("keywords", [])
         print(f"   • {session_id}:")

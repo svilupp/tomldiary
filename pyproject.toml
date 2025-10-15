@@ -1,6 +1,6 @@
 [project]
 name = "tomldiary"
-version = "0.2.0"
+version = "0.3.0"
 description = "A lightweight TOML-based memory system for AI agents"
 readme = "README.md"
 license = "MIT"
@@ -23,6 +23,7 @@ dependencies = [
     "textprompts>=1.0",
     "thefuzz>=0.22.1",
     "tomli-w",
+    "click>=8.0",
 ]
 requires-python = ">=3.11"
 
@@ -31,6 +32,9 @@ Homepage = "https://github.com/svilupp/tomldiary"
 Documentation = "https://github.com/svilupp/tomldiary/tree/main/docs"
 Repository = "https://github.com/svilupp/tomldiary"
 Issues = "https://github.com/svilupp/tomldiary/issues"
+
+[project.scripts]
+tomldiary = "tomldiary.cli:cli"
 
 [project.optional-dependencies]
 firestore = [
