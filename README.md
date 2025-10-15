@@ -15,31 +15,12 @@ TOMLDiary is a dead-simple, customizable memory system for agentic applications.
 - **Minimal overhead** – lightweight design, backend agnostic and easy to integrate.
 - **Atomic, safe writes** – ensures data integrity with proper file locking.
 
-## Storage Backends
-
-TOMLDiary supports multiple storage backends for different deployment scenarios:
-
-- **LocalBackend** (included) – File-based storage with path-level locking. Perfect for development, local applications, and single-server deployments.
-- **FirestoreBackend** (optional) – Google Cloud Firestore for cloud-based storage with multi-region replication, automatic scaling, and real-time sync. Requires `tomldiary[firestore]` installation.
-
-See the [Backend Options](#backend-options) section below for configuration examples.
-
 ## Installation
 
 Requires Python 3.11+
 
 ```bash
 uv add tomldiary pydantic-ai
-```
-
-### Optional: Firestore Backend
-
-To use the Firestore backend for cloud storage:
-
-```bash
-uv add 'tomldiary[firestore]'
-# or with pip
-pip install 'tomldiary[firestore]'
 ```
 
 ## Quick Start
@@ -229,11 +210,40 @@ except ValidationError as e:
 - **Type Safety**: Runtime validation prevents type-related errors
 - **Production Systems**: Catch schema mismatches early
 
-### Backend Options
+### Storage Backends
 
-The library supports different storage backends:
+TOMLDiary supports multiple storage backends for different deployment scenarios. **All backends implement a standard 6-method interface**, ensuring complete interchangeability:
 
-#### Local Filesystem (Default)
+- **LocalBackend** (included) – File-based storage with path-level locking. Perfect for development, local applications, and single-server deployments.
+- **FirestoreBackend** (optional) – Google Cloud Firestore for cloud-based storage with multi-region replication, automatic scaling, and real-time sync. Requires `tomldiary[firestore]` installation.
+
+#### Backend Interface
+
+All TOMLDiary backends implement a standard interface with 6 core methods:
+
+**Core Operations:**
+- `load(user_id, kind)` - Load document content
+- `save(user_id, kind, content)` - Save/update document
+
+**Document Operations:**
+- `exists(user_id, kind)` - Check if document exists
+- `delete(user_id, kind)` - Delete specific document
+
+**User Operations:**
+- `delete_user(user_id)` - Delete all user data
+- `list_users()` - List all user IDs
+
+This standardization ensures that:
+- ✅ Backends are fully interchangeable
+- ✅ LocalBackend works for development/testing
+- ✅ FirestoreBackend works for production
+- ✅ Future backends (Redis, S3, etc.) will have same API
+
+For detailed interface specifications and implementation guidelines, see [Backend Interface Documentation](docs/backend-interface.md).
+
+#### Configuration Examples
+
+##### Local Filesystem (Default)
 
 ```python
 from pathlib import Path
@@ -242,7 +252,7 @@ from tomldiary.backends import LocalBackend
 backend = LocalBackend(Path("./memories"))
 ```
 
-#### Firestore (Cloud Storage)
+##### Firestore (Cloud Storage)
 
 Install first: `uv add 'tomldiary[firestore]'`
 
@@ -281,7 +291,7 @@ backend = FirestoreBackend(
 
 Test your setup with `uv run --extra firestore scripts/firestore_test_connection.py` or `uv run --extra firestore examples/firestore_example.py`.
 
-#### Other Backends (Custom Implementation)
+##### Other Backends (Custom Implementation)
 
 ```python
 # S3 backend (implement your own S3Backend)
