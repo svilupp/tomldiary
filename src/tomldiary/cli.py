@@ -67,7 +67,7 @@ def main():
 
 def _handle_preferences_schema(class_path: str, format: str):
     """Handle preferences schema command."""
-    from typing import cast, Literal
+    from typing import Literal, cast
 
     format_typed = cast(Literal["pretty", "json", "python"], format)
     try:
@@ -117,7 +117,7 @@ def _handle_preferences_schema(class_path: str, format: str):
 
 def _handle_conversations_schema(format: str):
     """Handle conversations schema command."""
-    from typing import cast, Literal
+    from typing import Literal, cast
 
     format_typed = cast(Literal["pretty", "json", "python"], format)
     try:
