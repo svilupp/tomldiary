@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-10-15
+
+### Changed
+- Fixed up `None` handling in FirestoreBackend tests
+- Moved `loguru` to core dependencies and centralized logging configuration, optional ENVs for easier configuration `TOMLDIARY_LOG_LEVEL` and `TOMLDIARY_LOG_FILE`
+
 ## [0.3.0] - 2025-10-15
 
 ### Added
 - Type schema utilities (`show_preferences_schema()`, `show_conversations_schema()`) for inspecting preference table structures in multiple formats (pretty/json/python) - useful for API design and documentation
 - Safe data loading with `PreferenceLoader` and `ConversationLoader` using Pydantic TypeAdapter for runtime validation - see `examples/type_safety_demo.py`
 - CLI interface for quick schema inspection: `tomldiary schema preferences <path:Class>` and `tomldiary schema conversations` commands with `--format` option (or `-f json` short option)
+
+### Fixed
+- FirestoreBackend now correctly handles empty string content (previously returned None for empty files)
 
 ## [0.2.0] - 2025-10-14
 

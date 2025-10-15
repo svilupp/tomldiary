@@ -37,12 +37,15 @@ from datetime import UTC, datetime
 try:
     from google.api_core import exceptions as gcp_exceptions
     from google.cloud import firestore
-    from loguru import logger
 except ImportError as e:
     raise ImportError(
         "google-cloud-firestore is required for FirestoreBackend. "
         "Install with: uv add 'tomldiary[firestore]' or pip install 'tomldiary[firestore]'"
     ) from e
+
+from ..logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class FirestoreBackend:
@@ -178,7 +181,7 @@ class FirestoreBackend:
                 data = doc.to_dict()
                 content = data.get("content")
 
-                if content:
+                if content is not None:
                     logger.debug(f"Read {kind} for user {user_id}: {len(content)} chars")
                     return content
                 else:

@@ -1,6 +1,6 @@
 [project]
 name = "tomldiary"
-version = "0.3.0"
+version = "0.4.0"
 description = "A lightweight TOML-based memory system for AI agents"
 readme = "README.md"
 license = "MIT"
@@ -18,6 +18,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "loguru>=0.7.0",
     "pydantic>=2",
     "pydantic-ai>=1.0",
     "textprompts>=1.0",
@@ -38,9 +39,7 @@ tomldiary = "tomldiary.cli:cli"
 [project.optional-dependencies]
 firestore = [
     "google-cloud-firestore>=2.0.0",
-    "loguru>=0.7.0",
 ]
-
 [build-system]
 requires = ["uv_build>=0.8.0,<0.9.0"]
 build-backend = "uv_build"

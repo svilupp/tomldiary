@@ -233,6 +233,11 @@ class TestFirestoreBackend:
                 if self.path in self.storage:
                     del self.storage[self.path]
 
+            def collection(self, name):
+                # Document references can have subcollections
+                subcollection_path = f"{self.path}/{name}"
+                return MockCollectionReference(self.storage, subcollection_path)
+
         class MockCollectionReference:
             def __init__(self, storage, base_path):
                 self.storage = storage
