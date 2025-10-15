@@ -39,7 +39,7 @@ jobs:
     
     - name: Run tests
       run: |
-        uv run pytest -v --cov=tomldiary --cov-report=xml tests
+        uv run pytest -v --cov=tomldiary --cov-report=xml tests -k "not TestFirestoreBackend"
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

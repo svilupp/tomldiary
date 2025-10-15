@@ -158,6 +158,77 @@ The system includes enhanced tools for intelligent preference management:
 # To force create anyway: upsert_preference('likes', id='new', text='black blazers')"
 ```
 
+### Type Schema Utilities
+
+TOMLDiary provides utilities to inspect and display type schemas for your preference tables, making it easy to design APIs, generate documentation, and ensure type safety.
+
+```python
+from tomldiary.schema import show_preferences_schema, show_conversations_schema
+
+# Display schema in different formats
+print(show_preferences_schema(MyPrefTable))  # Pretty tree format
+print(show_preferences_schema(MyPrefTable, format="json"))  # JSON schema
+print(show_preferences_schema(MyPrefTable, format="python"))  # Python types
+
+# Show conversation schema
+print(show_conversations_schema())  # Works without a class (standardized)
+```
+
+**CLI Access:**
+
+```bash
+# Inspect preference schema from command line
+tomldiary schema preferences examples/culinary_prefs.py:CulinaryPrefTable
+
+# Get JSON schema for API documentation
+tomldiary schema preferences examples/culinary_prefs.py:CulinaryPrefTable -f json > schema.json
+
+# View conversation schema
+tomldiary schema conversations
+```
+
+**Use cases:**
+- **API Design**: Generate JSON schemas for OpenAPI/Swagger documentation
+- **Type Reference**: View Python type hints for your preference tables
+- **Documentation**: Auto-generate schema documentation
+- **Validation**: Understand the expected structure of your data
+
+### Safe Data Loading
+
+Load and validate TOML data with runtime type checking using Pydantic's TypeAdapter:
+
+```python
+from tomldiary.loaders import PreferenceLoader, load_preferences
+from pydantic import ValidationError
+
+# Load preferences with validation
+loader = PreferenceLoader(MyPrefTable)
+
+try:
+    # Load from diary
+    toml_data = await diary.preferences("user123")
+    prefs = loader.load_from_toml_str(toml_data)
+
+    # Now you have fully typed, validated data
+    print(type(prefs))  # MyPrefTable
+    print(type(prefs.likes))  # dict[str, PreferenceItem]
+
+except ValidationError as e:
+    print(f"Validation failed: {e}")
+
+# Validate partial data (e.g., from API requests)
+try:
+    validated = loader.validate_partial("likes", incoming_api_data)
+except ValidationError as e:
+    return {"error": "Invalid preference data", "details": str(e)}
+```
+
+**Use cases:**
+- **API Endpoints**: Validate incoming TOML payloads
+- **Data Migration**: Ensure data integrity during migrations
+- **Type Safety**: Runtime validation prevents type-related errors
+- **Production Systems**: Catch schema mismatches early
+
 ### Backend Options
 
 The library supports different storage backends:
@@ -365,7 +436,9 @@ Background queue for non-blocking writes:
 See the `examples/` directory for:
 - `simple_example.py`: Basic usage with educational agent (no LLM required)
 - `example_cooking_show.py`: Advanced AI-powered cooking show with celebrity chef interviews
+- `dietary_preferences.py`: Restaurant booking agent with preference learning
 - `culinary_prefs.py`: Custom preference schema for culinary applications
+- `type_safety_demo.py`: **NEW v0.3** - Complete guide to schema inspection & safe data loading
 
 **Note**: Examples use custom agents for educational purposes. The built-in extraction agent automatically uses the enhanced smart deduplication and limit enforcement tools described above.
 

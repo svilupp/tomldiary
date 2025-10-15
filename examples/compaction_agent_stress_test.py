@@ -13,16 +13,17 @@ Tests various scenarios where memories need to be compressed:
 """
 
 import asyncio
-from pathlib import Path
-from datetime import datetime, UTC
-from tomldiary import Diary
-from tomldiary.backends.local import LocalBackend
-from tomldiary.compaction import CompactionConfig
-from culinary_prefs import CulinaryPrefTable
 
 # Enable logfire for observability
 import os
+from pathlib import Path
+
+from culinary_prefs import CulinaryPrefTable
 from dotenv import load_dotenv
+
+from tomldiary import Diary
+from tomldiary.backends.local import LocalBackend
+from tomldiary.compaction import CompactionConfig
 
 load_dotenv()
 import logfire
@@ -115,7 +116,7 @@ class CompactionTestRunner:
             else 0
         )
 
-        print(f"\n📊 IMPACT:")
+        print("\n📊 IMPACT:")
         print(
             f"  • Preferences: {before['pref_count']} → {after['pref_count']} ({pref_reduction:+.0f}%)"
         )
@@ -124,11 +125,11 @@ class CompactionTestRunner:
         )
 
         if char_reduction > 20:
-            print(f"  ✅ Significant compression achieved")
+            print("  ✅ Significant compression achieved")
         elif char_reduction > 0:
-            print(f"  ⚠️  Modest compression")
+            print("  ⚠️  Modest compression")
         else:
-            print(f"  ❌ No compression or growth")
+            print("  ❌ No compression or growth")
 
 
 async def scenario_1_redundant_duplicates():
@@ -162,7 +163,7 @@ async def scenario_1_redundant_duplicates():
         await runner.diary.update_memory(
             user_id=user_id,
             session_id=f"interview_{i}",
-            user_msg=f"What's your favorite cuisine?",
+            user_msg="What's your favorite cuisine?",
             assistant_msg=phrase,
         )
 
@@ -176,7 +177,7 @@ async def scenario_1_redundant_duplicates():
     runner.print_comparison(before, after)
 
     # Show what's left
-    print(f"\n📄 Remaining preferences:")
+    print("\n📄 Remaining preferences:")
     for block in after["pref_blocks"][:5]:
         print(f"  {block}")
 
@@ -223,7 +224,7 @@ async def scenario_2_contradictory_evolution():
     runner.print_stats("📊 AFTER:", after)
     runner.print_comparison(before, after)
 
-    print(f"\n📄 Final preferences:")
+    print("\n📄 Final preferences:")
     for block in after["pref_blocks"]:
         print(f"  {block}")
 
@@ -266,7 +267,7 @@ async def scenario_3_noise_filler():
     runner.print_stats("📊 AFTER:", after)
     runner.print_comparison(before, after)
 
-    print(f"\n📄 Remaining content:")
+    print("\n📄 Remaining content:")
     for block in after["pref_blocks"]:
         print(f"  PREF: {block}")
     for block in after["conv_blocks"][:5]:
@@ -316,7 +317,7 @@ async def scenario_4_granular_to_consolidated():
     runner.print_stats("📊 AFTER:", after)
     runner.print_comparison(before, after)
 
-    print(f"\n📄 Result (should be grouped):")
+    print("\n📄 Result (should be grouped):")
     for block in after["pref_blocks"]:
         print(f"  {block}")
 
@@ -338,7 +339,7 @@ async def scenario_5_volume_stress():
 
     # 15 redundant about pasta
     for i in range(15):
-        messages.append((f"pasta_{i}", f"I love pasta", f"Pasta is wonderful"))
+        messages.append((f"pasta_{i}", "I love pasta", "Pasta is wonderful"))
 
     # 10 unique valuable facts
     unique_facts = [
@@ -380,7 +381,7 @@ async def scenario_5_volume_stress():
     runner.print_stats("📊 AFTER:", after)
     runner.print_comparison(before, after)
 
-    print(f"\n📄 Sample of what survived (first 10 prefs):")
+    print("\n📄 Sample of what survived (first 10 prefs):")
     for block in after["pref_blocks"][:10]:
         print(f"  {block}")
 
@@ -441,7 +442,7 @@ async def scenario_6_mixed_chaos():
     runner.print_stats("📊 AFTER:", after)
     runner.print_comparison(before, after)
 
-    print(f"\n📄 Final clean profile:")
+    print("\n📄 Final clean profile:")
     for block in after["pref_blocks"]:
         print(f"  {block}")
 
