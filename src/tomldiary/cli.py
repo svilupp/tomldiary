@@ -67,6 +67,8 @@ def main():
 
 def _handle_preferences_schema(class_path: str, format: str):
     """Handle preferences schema command."""
+    from typing import cast, Literal
+    format_typed = cast(Literal["pretty", "json", "python"], format)
     try:
         # Parse class_path
         if ":" not in class_path:
@@ -104,7 +106,7 @@ def _handle_preferences_schema(class_path: str, format: str):
         pref_table_cls = getattr(module, class_name)
 
         # Show schema
-        output = show_preferences_schema(pref_table_cls, format=format)
+        output = show_preferences_schema(pref_table_cls, format=format_typed)
         print(output)
 
     except Exception as e:
@@ -114,8 +116,10 @@ def _handle_preferences_schema(class_path: str, format: str):
 
 def _handle_conversations_schema(format: str):
     """Handle conversations schema command."""
+    from typing import cast, Literal
+    format_typed = cast(Literal["pretty", "json", "python"], format)
     try:
-        output = show_conversations_schema(format=format)
+        output = show_conversations_schema(format=format_typed)
         print(output)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
