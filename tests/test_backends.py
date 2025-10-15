@@ -347,10 +347,7 @@ class TestLocalBackend:
         await backend.save(user_id, "preferences", "test")
 
         # Multiple concurrent deletes (idempotency test)
-        tasks = [
-            asyncio.create_task(backend.delete(user_id, "preferences"))
-            for _ in range(10)
-        ]
+        tasks = [asyncio.create_task(backend.delete(user_id, "preferences")) for _ in range(10)]
 
         # Should all succeed without error
         await asyncio.gather(*tasks)
