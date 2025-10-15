@@ -412,7 +412,6 @@ def main():
     asyncio.run(demo_diary_integration())
     demo_conversation_loading()
 
-
     print("=" * 80)
     print("✅ Type Safety Demo Complete!")
     print("=" * 80)

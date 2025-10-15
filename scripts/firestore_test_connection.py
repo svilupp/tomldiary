@@ -531,7 +531,9 @@ keywords = ["salmon", "grilled", "seafood", "lactose", "dairy-free", "healthy"]
         validated_prefs = pref_loader.load_from_toml_str(prefs)
         print(f"  ✓ Preferences validated successfully ({read_latency:.2f}ms)")
         print(f"    - {len(validated_prefs.favorite_foods)} items in 'favorite_foods' category")
-        print(f"    - {len(validated_prefs.dietary_restrictions)} items in 'dietary_restrictions' category")
+        print(
+            f"    - {len(validated_prefs.dietary_restrictions)} items in 'dietary_restrictions' category"
+        )
     except Exception as e:
         print(f"  ❌ Preference validation failed: {e}")
         raise

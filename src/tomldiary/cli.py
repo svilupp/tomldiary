@@ -22,17 +22,11 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Schema command
-    schema_parser = subparsers.add_parser(
-        "schema", help="Schema inspection utilities"
-    )
-    schema_subparsers = schema_parser.add_subparsers(
-        dest="schema_command", help="Schema commands"
-    )
+    schema_parser = subparsers.add_parser("schema", help="Schema inspection utilities")
+    schema_subparsers = schema_parser.add_subparsers(dest="schema_command", help="Schema commands")
 
     # Schema preferences command
-    prefs_parser = schema_subparsers.add_parser(
-        "preferences", help="Show preference table schema"
-    )
+    prefs_parser = schema_subparsers.add_parser("preferences", help="Show preference table schema")
     prefs_parser.add_argument(
         "class_path",
         help="Path to preference table class (format: path/to/file.py:ClassName)",
@@ -46,9 +40,7 @@ def main():
     )
 
     # Schema conversations command
-    convs_parser = schema_subparsers.add_parser(
-        "conversations", help="Show conversation schema"
-    )
+    convs_parser = schema_subparsers.add_parser("conversations", help="Show conversation schema")
     convs_parser.add_argument(
         "-f",
         "--format",
