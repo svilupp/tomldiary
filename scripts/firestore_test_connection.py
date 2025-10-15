@@ -262,9 +262,9 @@ async def test_write_and_read(backend):
     test_content = """[_meta]
 version = "0.3"
 
-[preferences.black_blazers]
-text = "black blazers"
-contexts = ["work", "meetings"]
+[preferences.favorite_foods.pasta_carbonara]
+text = "creamy pasta carbonara with crispy bacon"
+contexts = ["italian", "pasta", "comfort food"]
 _count = 3
 """
 

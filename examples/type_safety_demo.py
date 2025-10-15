@@ -412,43 +412,6 @@ def main():
     asyncio.run(demo_diary_integration())
     demo_conversation_loading()
 
-    # Summary
-    section("Summary - Key Features")
-
-    print("""
-📋 SCHEMA INSPECTION:
---------------------
-✓ show_preferences_schema() - View preference table structure
-✓ show_conversations_schema() - View conversation structure
-✓ Multiple formats: pretty (tree), json (API docs), python (types)
-✓ CLI tools: tomldiary schema preferences/conversations
-✓ Programmatic access: get_preferences_schema(), get_conversations_schema()
-
-🔒 SAFE DATA LOADING:
----------------------
-✓ PreferenceLoader - Validate preference TOML data
-✓ ConversationLoader - Validate conversation TOML data
-✓ Runtime type checking with Pydantic TypeAdapter
-✓ validate_partial() - Validate individual categories (API payloads)
-✓ Clear validation errors with actionable messages
-
-🎯 USE CASES:
--------------
-✓ API Design: Generate JSON schemas for OpenAPI/Swagger docs
-✓ Type Safety: Runtime validation prevents type errors
-✓ Production APIs: Validate incoming payloads in FastAPI/Django
-✓ Data Integrity: Ensure stored data matches expected schema
-✓ Developer Experience: IDE autocomplete & type checking
-
-📚 NEXT STEPS:
---------------
-1. Try CLI: tomldiary schema preferences examples/culinary_prefs.py:CulinaryPrefTable
-2. Check docs/type-safety.md for comprehensive guide
-3. See plan.md for implementation details
-4. Integrate into your production applications
-
-🎉 Type safety + TOML simplicity = Production-ready memory system!
-    """)
 
     print("=" * 80)
     print("✅ Type Safety Demo Complete!")
