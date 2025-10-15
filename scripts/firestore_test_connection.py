@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "python-dotenv",
+#     "tomldiary[firestore]>=0.3.0",
+# ]
+# ///
 """
 Test script for Firestore backend
 
@@ -37,13 +44,15 @@ load_dotenv()
 from google.api_core import exceptions as gcp_exceptions
 from google.cloud import firestore
 from google.oauth2 import service_account
-from loguru import logger
 
 # Import tomldiary components
 from pydantic import BaseModel
 
 from tomldiary.loaders import ConversationLoader, PreferenceLoader
+from tomldiary.logging import get_logger
 from tomldiary.models import PreferenceItem
+
+logger = get_logger(__name__)
 
 
 # Define test preference table

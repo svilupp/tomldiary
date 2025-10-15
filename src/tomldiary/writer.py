@@ -1,8 +1,9 @@
 import asyncio
-import logging
 import os
 
-log = logging.getLogger(__name__)
+from .logging import get_logger
+
+log = get_logger(__name__)
 
 # Configuration defaults
 QUEUE_MAXSIZE = 1000
