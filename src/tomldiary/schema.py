@@ -52,7 +52,9 @@ def get_preferences_schema(pref_table_cls: type[BaseModel]) -> dict:
             if annotation is None:
                 type_str = "Any"
             else:
-                type_str = annotation.__name__ if hasattr(annotation, "__name__") else str(annotation)
+                type_str = (
+                    annotation.__name__ if hasattr(annotation, "__name__") else str(annotation)
+                )
 
             category_types[category] = type_str
             descriptions[category] = field_info.description or ""
