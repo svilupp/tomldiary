@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2025-10-15
 
 ### Changed
-- Fixed up `None` handling in FirestoreBackend
+- Fixed up `None` handling in FirestoreBackend tests
 - Moved `loguru` to core dependencies and centralized logging configuration, optional ENVs for easier configuration `TOMLDIARY_LOG_LEVEL` and `TOMLDIARY_LOG_FILE`
 
 ## [0.3.0] - 2025-10-15

@@ -1,6 +1,6 @@
 [project]
 name = "tomldiary"
-version = "0.3.0"
+version = "0.4.0"
 description = "A lightweight TOML-based memory system for AI agents"
 readme = "README.md"
 license = "MIT"
