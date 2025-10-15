@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Type schema utilities (`show_preferences_schema()`, `show_conversations_schema()`) for inspecting preference table structures in multiple formats (pretty/json/python) - useful for API design and documentation
 - Safe data loading with `PreferenceLoader` and `ConversationLoader` using Pydantic TypeAdapter for runtime validation - see `examples/type_safety_demo.py`
-- CLI interface for quick schema inspection: `tomldiary schema preferences <path:Class>` and `tomldiary schema conversations` commands with `--format` option
+- CLI interface for quick schema inspection: `tomldiary schema preferences <path:Class>` and `tomldiary schema conversations` commands with `--format` option (or `-f json` short option)
 
 ## [0.2.0] - 2025-10-14
 
