@@ -87,8 +87,11 @@ def configure_stdlib_logging_intercept():
                 level = record.levelno
 
             # Find caller from where originated the logged message
-            frame, depth = sys._getframe(6), 6
+            frame = sys._getframe(6)
+            depth = 6
             while frame and frame.f_code.co_filename == logging.__file__:
+                if frame.f_back is None:
+                    break
                 frame = frame.f_back
                 depth += 1
 
