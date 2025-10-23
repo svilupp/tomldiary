@@ -561,8 +561,7 @@ class TestMemoryWriter:
         # Submit large batch
         num_tasks = 50
         submit_tasks = [
-            writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}")
-            for i in range(num_tasks)
+            writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}") for i in range(num_tasks)
         ]
 
         # Submit and immediately start closing

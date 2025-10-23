@@ -176,7 +176,7 @@ class MemoryWriter:
         try:
             await asyncio.wait_for(self.q.join(), timeout=SHUTDOWN_TIMEOUT)
             log.debug("Queue drained successfully")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             remaining = self.q.qsize()
             log.warning(
                 f"Queue did not drain within {SHUTDOWN_TIMEOUT}s timeout, "
