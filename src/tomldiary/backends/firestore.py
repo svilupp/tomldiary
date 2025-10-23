@@ -80,6 +80,7 @@ class FirestoreBackend:
         project_id: str,
         base_path: str = "users",
         credentials_path: str | None = None,
+        credentials_dict: dict | None = None,
         database: str = "(default)",
     ):
         """
@@ -89,11 +90,20 @@ class FirestoreBackend:
             project_id: GCP project ID
             base_path: Base path for Firestore documents (e.g., "experiments/memory")
             credentials_path: Path to service account JSON file (optional)
+            credentials_dict: Service account credentials as dict (optional)
             database: Firestore database name (default: "(default)")
 
         Raises:
+            ValueError: If both credentials_path and credentials_dict are provided
             ValueError: If base_path has an odd number of segments (Firestore requirement)
         """
+        # Validate credentials - only one method should be provided
+        if credentials_path and credentials_dict:
+            raise ValueError(
+                "Cannot specify both credentials_path and credentials_dict. "
+                "Please provide only one credential method."
+            )
+
         self.project_id = project_id
         self.database = database
         self.base_path = base_path.strip("/")
@@ -109,22 +119,40 @@ class FirestoreBackend:
                 f"Example: '{base_path}/memory' (if your current path is just one segment)"
             )
 
-        # Initialize Firestore client
-        if credentials_path:
+        # Initialize Firestore client with appropriate credentials
+        if credentials_dict:
+            # Use dict directly - no file I/O, more secure!
+            from google.oauth2 import service_account
+
+            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            self.db = firestore.Client(
+                project=project_id, database=database, credentials=credentials
+            )
+            logger.info(
+                f"FirestoreBackend initialized with credentials dict: "
+                f"project={project_id}, database={database}, base_path={self.base_path}"
+            )
+
+        elif credentials_path:
+            # Use file path (traditional method)
             from google.oauth2 import service_account
 
             credentials = service_account.Credentials.from_service_account_file(credentials_path)
             self.db = firestore.Client(
                 project=project_id, database=database, credentials=credentials
             )
+            logger.info(
+                f"FirestoreBackend initialized with credentials file: "
+                f"project={project_id}, database={database}, base_path={self.base_path}"
+            )
+
         else:
             # Use default credentials (works with emulator or ADC)
             self.db = firestore.Client(project=project_id, database=database)
-
-        logger.info(
-            f"FirestoreBackend initialized: project={project_id}, database={database}, "
-            f"base_path={self.base_path} ({len(path_segments)} segments)"
-        )
+            logger.info(
+                f"FirestoreBackend initialized with default credentials (ADC): "
+                f"project={project_id}, database={database}, base_path={self.base_path}"
+            )
 
     def _get_document_ref(self, user_id: str, kind: str):
         """

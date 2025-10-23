@@ -677,3 +677,107 @@ class TestFirestoreBackend:
         # List returns both
         users = await backend.list_users()
         assert set(users) == {"alice", "bob"}
+
+    def test_credentials_dict_initialization(self, monkeypatch):
+        """Test FirestoreBackend initialization with credentials_dict."""
+        # Mock the service account credentials
+        mock_creds = object()
+
+        def mock_from_service_account_info(info_dict):
+            assert info_dict["type"] == "service_account"
+            assert info_dict["project_id"] == "test-project"
+            return mock_creds
+
+        # Mock Firestore client
+        mock_client = object()
+
+        def mock_client_init(*args, **kwargs):
+            assert kwargs.get("credentials") == mock_creds
+            return mock_client
+
+        monkeypatch.setattr(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            mock_from_service_account_info,
+        )
+        monkeypatch.setattr("google.cloud.firestore.Client", mock_client_init)
+
+        # Test with credentials_dict
+        creds_dict = {
+            "type": "service_account",
+            "project_id": "test-project",
+            "private_key_id": "key123",
+            "private_key": "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+            "client_email": "test@test-project.iam.gserviceaccount.com",
+            "client_id": "123456",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+
+        backend = FirestoreBackend(
+            project_id="test-project", base_path="test/data", credentials_dict=creds_dict
+        )
+
+        assert backend.project_id == "test-project"
+        assert backend.db is not None
+
+    def test_credentials_path_initialization(self, monkeypatch):
+        """Test FirestoreBackend initialization with credentials_path."""
+        # Mock the service account credentials
+        mock_creds = object()
+
+        def mock_from_service_account_file(file_path):
+            assert file_path == "/path/to/creds.json"
+            return mock_creds
+
+        # Mock Firestore client
+        mock_client = object()
+
+        def mock_client_init(*args, **kwargs):
+            assert kwargs.get("credentials") == mock_creds
+            return mock_client
+
+        monkeypatch.setattr(
+            "google.oauth2.service_account.Credentials.from_service_account_file",
+            mock_from_service_account_file,
+        )
+        monkeypatch.setattr("google.cloud.firestore.Client", mock_client_init)
+
+        # Test with credentials_path
+        backend = FirestoreBackend(
+            project_id="test-project",
+            base_path="test/data",
+            credentials_path="/path/to/creds.json",
+        )
+
+        assert backend.project_id == "test-project"
+        assert backend.db is not None
+
+    def test_both_credentials_raises_error(self):
+        """Test that providing both credentials methods raises ValueError."""
+        creds_dict = {"type": "service_account", "project_id": "test"}
+
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            FirestoreBackend(
+                project_id="test-project",
+                base_path="test/data",
+                credentials_path="/path/to/creds.json",
+                credentials_dict=creds_dict,
+            )
+
+    def test_default_credentials_initialization(self, monkeypatch):
+        """Test FirestoreBackend initialization with default credentials (ADC)."""
+        # Mock Firestore client
+        mock_client = object()
+
+        def mock_client_init(*args, **kwargs):
+            # Should not have credentials kwarg when using default
+            assert "credentials" not in kwargs or kwargs.get("credentials") is None
+            return mock_client
+
+        monkeypatch.setattr("google.cloud.firestore.Client", mock_client_init)
+
+        # Test with no credentials (uses ADC)
+        backend = FirestoreBackend(project_id="test-project", base_path="test/data")
+
+        assert backend.project_id == "test-project"
+        assert backend.db is not None
