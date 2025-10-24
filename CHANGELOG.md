@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Thread-safety improvements in `MemoryWriter` for Python 3.14 no-GIL compatibility: added `asyncio.Lock()` to protect counter operations, ensuring race-free statistics and consistent shutdown behavior
-- Improved `MemoryWriter.close()` with timeout protection to prevent deadlock if workers fail to drain queue
+- Improved `MemoryWriter.close()` with protection to prevent deadlock if workers fail to drain queue
 - FirestoreBackend now supports `credentials_dict` parameter for passing service account credentials as dict
 
 ## [0.5.0] - 2025-10-15

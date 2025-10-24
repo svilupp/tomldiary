@@ -116,7 +116,7 @@ async def simple_demo():
     diary = Diary(
         backend=backend,
         pref_table_cls=SimplePrefTable,
-        agent=(agent, ["like", "dislike", "about"]),
+        agent=agent,
         max_prefs_per_category=5,
         max_conversations=3,
         compaction_config=compaction,
