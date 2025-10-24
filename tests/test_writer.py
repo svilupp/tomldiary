@@ -245,7 +245,7 @@ class TestMemoryWriter:
     async def test_stats_basic(self, writer, mock_diary):
         """Test basic stats() method returns correct metrics."""
         # Check initial stats
-        stats = await writer.stats()
+        stats = writer.stats()
 
         assert stats["queue_size"] == 0
         assert stats["queue_capacity"] == 10
@@ -270,7 +270,7 @@ class TestMemoryWriter:
         await writer.submit("user2", "session2", "Test", "Testing")
 
         # Check stats before processing
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["submitted"] == 2
         assert stats["queue_size"] <= 2
 
@@ -278,7 +278,7 @@ class TestMemoryWriter:
         await asyncio.sleep(0.2)
 
         # Check stats after processing
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["submitted"] == 2
         assert stats["completed"] == 2
         assert stats["failed"] == 0
@@ -303,7 +303,7 @@ class TestMemoryWriter:
         await asyncio.sleep(0.2)
 
         # Check error tracking
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["submitted"] == 2
         assert stats["completed"] == 0
         assert stats["failed"] == 2
@@ -331,7 +331,7 @@ class TestMemoryWriter:
         await writer.submit("user3", "session3", "Success2", "Response3")
         await asyncio.sleep(0.1)
 
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["submitted"] == 3
         assert stats["completed"] == 2
         assert stats["failed"] == 1
@@ -353,7 +353,7 @@ class TestMemoryWriter:
         await writer.submit("user2", "session2", "msg2", "resp2")
 
         # Check utilization
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["queue_utilization"] > 0.0
         assert stats["queue_utilization"] <= 1.0
         assert stats["queue_size"] <= 5
@@ -369,7 +369,7 @@ class TestMemoryWriter:
         writer = MemoryWriter(mock_diary, workers=2, qsize=10)
 
         # Check idle state
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["active_workers"] == 0
         assert stats["idle_workers"] == 2
 
@@ -379,14 +379,14 @@ class TestMemoryWriter:
 
         # Check immediately - workers should be active
         await asyncio.sleep(0.05)
-        stats = await writer.stats()
+        stats = writer.stats()
         # At least one worker should be active (timing dependent)
         assert stats["active_workers"] >= 0
         assert stats["active_workers"] <= 2
 
         # Wait for completion
         await asyncio.sleep(0.3)
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["active_workers"] == 0
         assert stats["idle_workers"] == 2
 
@@ -414,13 +414,13 @@ class TestMemoryWriter:
 
         # Check immediately - should have pending tasks
         await asyncio.sleep(0.05)
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["submitted"] == 3
         assert stats["pending"] > 0
 
         # Wait for completion
         await asyncio.sleep(1.0)
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["pending"] == 0
         assert stats["completed"] == 3
 
@@ -447,7 +447,7 @@ class TestMemoryWriter:
         await asyncio.sleep(0.5)
 
         # Verify counter invariants
-        stats = await writer.stats()
+        stats = writer.stats()
 
         # Critical invariant: submitted = completed + failed + pending
         assert stats["submitted"] == num_batches * batch_size
@@ -476,7 +476,7 @@ class TestMemoryWriter:
         # Poll stats repeatedly while processing
         inconsistencies = []
         for _ in range(20):
-            stats = await writer.stats()
+            stats = writer.stats()
 
             # Check invariants
             if stats["completed"] + stats["failed"] + stats["pending"] != stats["submitted"]:
@@ -510,11 +510,11 @@ class TestMemoryWriter:
             writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}") for i in range(30)
         ]
 
-        # Hammer stats() with concurrent calls while submitting
-        stats_tasks = [writer.stats() for _ in range(50)]
+        # Hammer stats() with concurrent calls while submitting using worker threads
+        stats_calls = [asyncio.to_thread(writer.stats) for _ in range(50)]
 
         # All should complete without errors
-        all_results = await asyncio.gather(*submit_tasks, *stats_tasks)
+        all_results = await asyncio.gather(*submit_tasks, *stats_calls)
 
         # Extract stats results (last 50 items)
         all_stats = all_results[-50:]
@@ -546,10 +546,40 @@ class TestMemoryWriter:
         assert len(mock_diary.updates) == num_tasks
 
         # Final stats should be consistent
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["completed"] == num_tasks
         assert stats["pending"] == 0
         assert stats["active_workers"] == 0
+
+    @pytest.mark.asyncio
+    async def test_close_waits_for_inflight_submit(self, mock_diary):
+        """Submitting before close starts must still be processed."""
+        mock_diary.update_delay = 0.05
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=1)
+
+        # Fill the queue so the second submit blocks on put()
+        await writer.submit("user-0", "sess", "msg-0", "resp-0")
+
+        pending_submit = asyncio.create_task(writer.submit("user-1", "sess", "msg-1", "resp-1"))
+
+        # Allow the background worker to start processing the first entry
+        await asyncio.sleep(0.02)
+
+        close_task = asyncio.create_task(writer.close())
+
+        # Close should not finish until the pending submit is processed
+        await asyncio.sleep(0.05)
+        assert not close_task.done()
+
+        await pending_submit
+        await close_task
+
+        stats = writer.stats()
+        assert stats["submitted"] == 2
+        assert stats["completed"] == 2
+        assert stats["pending"] == 0
+        assert len(mock_diary.updates) == 2
 
     @pytest.mark.asyncio
     async def test_no_work_lost_during_shutdown(self, mock_diary):
@@ -572,7 +602,7 @@ class TestMemoryWriter:
         await close_task
 
         # Verify accounting is correct
-        stats = await writer.stats()
+        stats = writer.stats()
         assert stats["submitted"] == num_tasks
         assert stats["completed"] + stats["failed"] == num_tasks
         assert len(mock_diary.updates) == stats["completed"]
