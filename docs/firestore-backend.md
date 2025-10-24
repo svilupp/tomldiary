@@ -72,6 +72,12 @@ diary = Diary(
 
 - **`credentials_path`** (str, optional): Path to service account JSON file
   - If not provided, uses Application Default Credentials (ADC)
+  - Cannot be used together with `credentials_dict`
+
+- **`credentials_dict`** (dict, optional): Service account credentials as a dictionary
+  - Alternative to `credentials_path` for passing credentials directly
+  - Useful for cloud environments (Cloud Run, Cloud Functions) where reading from files is less secure
+  - Cannot be used together with `credentials_path`
 
 - **`database`** (str, default: `"(default)"`): Firestore database name
 
@@ -101,7 +107,30 @@ backend = FirestoreBackend(
 )
 ```
 
-### 3. Environment Variables (for scripts/test_firestore.py)
+### 3. Service Account Dictionary (Recommended for Cloud Environments)
+
+```python
+import json
+import os
+
+# Load credentials from environment variable or secret manager
+credentials_json = os.getenv("GCP_CREDENTIALS_JSON")
+credentials = json.loads(credentials_json)
+
+backend = FirestoreBackend(
+    project_id="my-project",
+    base_path="app/memory",
+    credentials_dict=credentials
+)
+```
+
+**Benefits:**
+- More secure in serverless environments (Cloud Run, Cloud Functions, etc.)
+- No file I/O required
+- Works well with secret management systems
+- Credentials can be injected at runtime
+
+### 4. Environment Variables (for scripts/test_firestore.py)
 
 ```bash
 export FIREBASE_ADMIN_CREDS='{"type":"service_account",...}'

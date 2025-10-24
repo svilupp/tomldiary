@@ -265,12 +265,22 @@ backend = FirestoreBackend(
     base_path="app/memory"  # Must have EVEN number of segments
 )
 
-# Or with explicit credentials
+# Or with service account JSON file
 backend = FirestoreBackend(
     project_id="my-gcp-project",
     base_path="app/memory",
     credentials_path="/path/to/service-account.json",
     database="my-database"  # Optional, defaults to "(default)"
+)
+
+# Or with credentials dictionary (recommended for cloud environments)
+import json
+credentials = json.loads(os.getenv("GCP_CREDENTIALS_JSON"))
+backend = FirestoreBackend(
+    project_id="my-gcp-project",
+    base_path="app/memory",
+    credentials_dict=credentials,
+    database="my-database"
 )
 ```
 

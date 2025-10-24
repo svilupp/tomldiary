@@ -161,6 +161,40 @@ Load a TOML file for a user.
 ##### `async def save(user_id: str, kind: str, content: str)`
 Save a TOML file for a user with atomic writes.
 
+### FirestoreBackend
+
+Google Cloud Firestore storage backend.
+
+```python
+class FirestoreBackend:
+    def __init__(
+        self,
+        project_id: str,
+        base_path: str = "users",
+        credentials_path: str | None = None,
+        credentials_dict: dict | None = None,
+        database: str = "(default)",
+    )
+```
+
+#### Parameters
+
+- `project_id`: Google Cloud project ID
+- `base_path`: Base path for storing data (must have EVEN number of segments)
+- `credentials_path`: Optional path to service account JSON file
+- `credentials_dict`: Optional service account credentials as dict (alternative to credentials_path)
+- `database`: Firestore database name (default: "(default)")
+
+**Note**: Only one of `credentials_path` or `credentials_dict` can be provided. If neither is provided, uses Application Default Credentials (ADC).
+
+#### Methods
+
+##### `async def load(user_id: str, kind: str) -> Optional[str]`
+Load a TOML document from Firestore.
+
+##### `async def save(user_id: str, kind: str, content: str)`
+Save a TOML document to Firestore with atomic writes.
+
 ## Tools
 
 The extraction agent has access to these enhanced tools with smart deduplication and limit enforcement:
