@@ -59,7 +59,8 @@ class FirestoreBackend:
         project_id: Google Cloud project ID
         base_path: Base path for storing memory files (e.g., "experiments/memory")
                    Must have an EVEN number of segments for Firestore compatibility
-        credentials_path: Optional path to service account JSON (if not using default credentials)
+        credentials_path: Optional path to service account JSON file (if not using default credentials)
+        credentials_dict: Optional service account credentials as dict (alternative to credentials_path)
         database: Firestore database name (default: "(default)")
 
     Example:
