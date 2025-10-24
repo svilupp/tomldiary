@@ -426,6 +426,187 @@ class TestMemoryWriter:
 
         await writer.close()
 
+    @pytest.mark.asyncio
+    async def test_counter_consistency_under_load(self, mock_diary):
+        """Test that counters remain consistent under high concurrent load."""
+        # High concurrency stress test
+        writer = MemoryWriter(mock_diary, workers=8, qsize=100)
+
+        # Rapid fire submissions
+        num_batches = 10
+        batch_size = 50
+
+        for _ in range(num_batches):
+            tasks = [
+                writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}")
+                for i in range(batch_size)
+            ]
+            await asyncio.gather(*tasks)
+
+        # Wait for all processing to complete
+        await asyncio.sleep(0.5)
+
+        # Verify counter invariants
+        stats = writer.stats()
+
+        # Critical invariant: submitted = completed + failed + pending
+        assert stats["submitted"] == num_batches * batch_size
+        assert stats["completed"] + stats["failed"] == stats["submitted"]
+        assert stats["pending"] == 0
+        assert stats["active_workers"] == 0
+
+        # Check all updates were processed
+        assert len(mock_diary.updates) == num_batches * batch_size
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_consistency_during_processing(self, mock_diary):
+        """Test that stats() returns consistent snapshots during active processing."""
+        # Slow processing to keep workers active
+        mock_diary.update_delay = 0.1
+
+        writer = MemoryWriter(mock_diary, workers=4, qsize=50)
+
+        # Submit work
+        num_tasks = 40
+        for i in range(num_tasks):
+            await writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}")
+
+        # Poll stats repeatedly while processing
+        inconsistencies = []
+        for _ in range(20):
+            stats = writer.stats()
+
+            # Check invariants
+            if stats["completed"] + stats["failed"] + stats["pending"] != stats["submitted"]:
+                inconsistencies.append(("total_mismatch", stats))
+
+            if stats["pending"] < 0:
+                inconsistencies.append(("negative_pending", stats))
+
+            if stats["active_workers"] > stats["total_workers"]:
+                inconsistencies.append(("too_many_active", stats))
+
+            await asyncio.sleep(0.05)
+
+        # Wait for completion
+        await asyncio.sleep(1)
+
+        # Should have no inconsistencies
+        assert len(inconsistencies) == 0, f"Found inconsistent stats: {inconsistencies}"
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_stats_calls(self, mock_diary):
+        """Test that concurrent stats() calls don't cause race conditions."""
+        mock_diary.update_delay = 0.05
+
+        writer = MemoryWriter(mock_diary, workers=4, qsize=20)
+
+        # Submit background work (as a list of coroutines)
+        submit_tasks = [
+            writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}") for i in range(30)
+        ]
+
+        # Hammer stats() with concurrent calls while submitting using worker threads
+        stats_calls = [asyncio.to_thread(writer.stats) for _ in range(50)]
+
+        # All should complete without errors
+        all_results = await asyncio.gather(*submit_tasks, *stats_calls)
+
+        # Extract stats results (last 50 items)
+        all_stats = all_results[-50:]
+
+        # Verify all returned valid data
+        for stats in all_stats:
+            assert "submitted" in stats
+            assert stats["pending"] >= 0
+            assert stats["active_workers"] >= 0
+
+        await writer.close()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_with_pending_work(self, mock_diary):
+        """Test that shutdown doesn't lose work or corrupt counters."""
+        mock_diary.update_delay = 0.05
+
+        writer = MemoryWriter(mock_diary, workers=2, qsize=20)
+
+        # Submit work
+        num_tasks = 15
+        for i in range(num_tasks):
+            await writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}")
+
+        # Don't wait - close immediately
+        await writer.close()
+
+        # All work should have been processed
+        assert len(mock_diary.updates) == num_tasks
+
+        # Final stats should be consistent
+        stats = writer.stats()
+        assert stats["completed"] == num_tasks
+        assert stats["pending"] == 0
+        assert stats["active_workers"] == 0
+
+    @pytest.mark.asyncio
+    async def test_close_waits_for_inflight_submit(self, mock_diary):
+        """Submitting before close starts must still be processed."""
+        mock_diary.update_delay = 0.05
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=1)
+
+        # Fill the queue so the second submit blocks on put()
+        await writer.submit("user-0", "sess", "msg-0", "resp-0")
+
+        pending_submit = asyncio.create_task(writer.submit("user-1", "sess", "msg-1", "resp-1"))
+
+        # Allow the background worker to start processing the first entry
+        await asyncio.sleep(0.02)
+
+        close_task = asyncio.create_task(writer.close())
+
+        # Close should not finish until the pending submit is processed
+        await asyncio.sleep(0.05)
+        assert not close_task.done()
+
+        await pending_submit
+        await close_task
+
+        stats = writer.stats()
+        assert stats["submitted"] == 2
+        assert stats["completed"] == 2
+        assert stats["pending"] == 0
+        assert len(mock_diary.updates) == 2
+
+    @pytest.mark.asyncio
+    async def test_no_work_lost_during_shutdown(self, mock_diary):
+        """Test that no work is lost even with immediate shutdown."""
+        mock_diary.update_delay = 0.1  # Slow processing
+
+        writer = MemoryWriter(mock_diary, workers=2, qsize=100)
+
+        # Submit large batch
+        num_tasks = 50
+        submit_tasks = [
+            writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}") for i in range(num_tasks)
+        ]
+
+        # Submit and immediately start closing
+        await asyncio.gather(*submit_tasks)
+        close_task = asyncio.create_task(writer.close())
+
+        # Wait for shutdown
+        await close_task
+
+        # Verify accounting is correct
+        stats = writer.stats()
+        assert stats["submitted"] == num_tasks
+        assert stats["completed"] + stats["failed"] == num_tasks
+        assert len(mock_diary.updates) == stats["completed"]
+
 
 class TestShutdownBackgroundTasks:
     """Test shutdown_all_background_tasks function."""

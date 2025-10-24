@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 
 from .logging import get_logger
 
@@ -33,12 +34,18 @@ class MemoryWriter:
     def __init__(self, diary, *, workers=WORKERS, qsize=QUEUE_MAXSIZE):
         self.diary = diary
         self.q = asyncio.Queue(maxsize=qsize)
+
+        # Synchronization lock for counters/state. Use threading.Lock so synchronous stats()
+        # can take a consistent snapshot without awaiting.
+        self._state_lock = threading.Lock()
+
         self.workers = [
             fire_and_forget(self._worker(i), name=f"memory-worker-{i}") for i in range(workers)
         ]
-        self._running = True
+        self._accepting = True
+        self._shutdown = False
 
-        # Observability metrics
+        # Observability metrics (protect all updates with _state_lock)
         self._submitted_count = 0
         self._completed_count = 0
         self._failed_count = 0
@@ -46,16 +53,24 @@ class MemoryWriter:
 
     async def submit(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str):
         """Submit a memory update request to the queue (may block on backpressure)."""
-        if not self._running:
-            raise RuntimeError("MemoryWriter is closed")
-        self._submitted_count += 1
+        with self._state_lock:
+            if not self._accepting:
+                raise RuntimeError("MemoryWriter is closed")
+            self._submitted_count += 1
+
+        # Queue operations are thread-safe, can be done outside lock
         await self.q.put((user_id, session_id, user_msg, assistant_msg))
 
     async def _worker(self, worker_id: int):
         """Worker task that processes memory updates from the queue."""
         log.debug(f"Memory worker {worker_id} started")
         try:
-            while self._running:
+            while True:
+                with self._state_lock:
+                    shutting_down = self._shutdown
+                if shutting_down and self.q.empty():
+                    break
+
                 try:
                     # Wait for work with a timeout to allow graceful shutdown
                     user_id, session_id, user_msg, assistant_msg = await asyncio.wait_for(
@@ -64,15 +79,25 @@ class MemoryWriter:
                 except TimeoutError:
                     continue
 
-                self._active_workers += 1
+                # Increment active workers counter (thread-safe)
+                with self._state_lock:
+                    self._active_workers += 1
+
                 try:
                     await self._process(user_id, session_id, user_msg, assistant_msg)
-                    self._completed_count += 1
+
+                    # Increment completed counter (thread-safe)
+                    with self._state_lock:
+                        self._completed_count += 1
                 except Exception as e:
-                    self._failed_count += 1
+                    # Increment failed counter (thread-safe)
+                    with self._state_lock:
+                        self._failed_count += 1
                     log.exception(f"Worker {worker_id} failed to process memory update: {e}")
                 finally:
-                    self._active_workers -= 1
+                    # Decrement active workers counter (thread-safe)
+                    with self._state_lock:
+                        self._active_workers -= 1
                     self.q.task_done()
         except asyncio.CancelledError:
             log.debug(f"Memory worker {worker_id} cancelled")
@@ -86,6 +111,10 @@ class MemoryWriter:
     def stats(self) -> dict[str, int | float | bool]:
         """
         Get current writer statistics for observability and monitoring.
+
+        Returns a consistent snapshot of all metrics by reading them atomically under lock.
+        This prevents inconsistent states (e.g., completed > submitted) that could occur
+        if counters are updated between reads.
 
         Returns:
             Dictionary containing:
@@ -102,13 +131,18 @@ class MemoryWriter:
             - error_rate: Ratio of failed to submitted tasks
             - is_running: Whether writer is accepting new tasks
         """
+        # Read all counters atomically to ensure consistent snapshot
+        with self._state_lock:
+            submitted = self._submitted_count
+            completed = self._completed_count
+            failed = self._failed_count
+            active_workers = self._active_workers
+            accepting = self._accepting
+
+        # Queue operations are thread-safe, can read outside lock
         queue_size = self.q.qsize()
         queue_capacity = self.q.maxsize
-        submitted = self._submitted_count
-        completed = self._completed_count
-        failed = self._failed_count
         total_workers = len(self.workers)
-        active_workers = self._active_workers
 
         return {
             "queue_size": queue_size,
@@ -122,27 +156,45 @@ class MemoryWriter:
             "failed": failed,
             "pending": submitted - completed - failed,
             "error_rate": failed / max(submitted, 1),
-            "is_running": self._running,
+            "is_running": accepting,
         }
 
     @property
     def is_running(self) -> bool:
-        """Check if writer is currently accepting tasks."""
-        return self._running
+        """
+        Check if writer is currently accepting tasks.
+
+        Note: This read is not synchronized, so the value may be slightly stale
+        in high-concurrency scenarios. For a guaranteed consistent read, use
+        stats()['is_running'] instead.
+        """
+        return self._accepting
 
     async def close(self):
         """Gracefully shutdown the writer and all workers."""
         log.info("Shutting down MemoryWriter...")
 
-        # Wait for queue to drain while workers are still running
-        await self.q.join()
+        with self._state_lock:
+            if not self._accepting and self._shutdown:
+                # Already closed
+                return
+            self._accepting = False
 
-        # Signal workers to exit
-        self._running = False
+        # Wait for queue to drain with timeout to prevent deadlock
+        # (keep workers processing while accepting is disabled)
+        try:
+            await asyncio.wait_for(self.q.join(), timeout=SHUTDOWN_TIMEOUT)
+            log.debug("Queue drained successfully")
+        except TimeoutError:
+            remaining = self.q.qsize()
+            log.warning(
+                f"Queue did not drain within {SHUTDOWN_TIMEOUT}s timeout, "
+                f"{remaining} items remaining. Proceeding with worker shutdown."
+            )
 
-        # Cancel all workers
-        for worker in self.workers:
-            worker.cancel()
+        # Signal workers to stop after queue is drained (or after timeout)
+        with self._state_lock:
+            self._shutdown = True
 
         # Wait for workers to finish
         await asyncio.gather(*self.workers, return_exceptions=True)
