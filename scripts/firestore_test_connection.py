@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #     "python-dotenv",
-#     "tomldiary[firestore]>=0.3.0",
+#     "tomldiary[firestore]",
 # ]
 # ///
 """
@@ -85,6 +85,7 @@ class FirestoreBackend:
         project_id: str,
         base_path: str = "users",
         credentials_path: str | None = None,
+        credentials_dict: dict | None = None,
         database: str = "(default)",
     ):
         self.project_id = project_id
@@ -101,7 +102,12 @@ class FirestoreBackend:
             )
 
         # Initialize Firestore client
-        if credentials_path:
+        if credentials_dict:
+            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            self.db = firestore.Client(
+                project=project_id, database=database, credentials=credentials
+            )
+        elif credentials_path:
             credentials = service_account.Credentials.from_service_account_file(credentials_path)
             self.db = firestore.Client(
                 project=project_id, database=database, credentials=credentials
@@ -242,7 +248,7 @@ class FirestoreBackend:
 
 
 def setup_firebase_credentials():
-    """Setup Firebase credentials from environment variables"""
+    """Setup Firebase credentials from environment variables and return as dict"""
     creds_json = os.getenv("FIREBASE_ADMIN_CREDS")
     if not creds_json:
         raise ValueError(
@@ -250,18 +256,14 @@ def setup_firebase_credentials():
             "Please set it to your Firebase service account JSON string."
         )
 
-    # Parse and save credentials to temporary file
+    # Parse credentials JSON
     try:
-        creds = json.loads(creds_json)
+        creds_dict = json.loads(creds_json)
+        print(f"  ✓ Parsed credentials for project: {creds_dict.get('project_id', 'unknown')}")
+        print(f"  ✓ Service account: {creds_dict.get('client_email', 'unknown')}")
+        return creds_dict
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid FIREBASE_ADMIN_CREDS JSON: {e}") from e
-
-    creds_path = project_root / "temp_firebase_creds.json"
-
-    with open(creds_path, "w") as f:
-        json.dump(creds, f)
-
-    return str(creds_path)
 
 
 async def test_write_and_read(backend):
@@ -629,16 +631,15 @@ async def main():
     # Setup credentials
     print("Setting up Firebase credentials...")
     try:
-        creds_path = setup_firebase_credentials()
-        print("  ✓ Credentials loaded from .env")
+        creds_dict = setup_firebase_credentials()
     except Exception as e:
         print(f"❌ ERROR: Failed to setup credentials: {e}")
         sys.exit(1)
 
-    # Get configuration from environment
-    project_id = os.getenv("FIREBASE_ADMIN_PROJECT_ID")
+    # Get configuration from environment (use project_id from credentials)
+    project_id = creds_dict.get("project_id")
     if not project_id:
-        print("❌ ERROR: FIREBASE_ADMIN_PROJECT_ID environment variable is required")
+        print("❌ ERROR: project_id not found in credentials")
         sys.exit(1)
 
     database_name = os.getenv("FIREBASE_WINDOW_SHOP_DB_NAME", "(default)")
@@ -655,12 +656,12 @@ async def main():
     print()
 
     try:
-        # Initialize backend
+        # Initialize backend with credentials dict
         print("Initializing Firestore backend...")
         backend = FirestoreBackend(
             project_id=project_id,
             base_path=base_path,
-            credentials_path=creds_path,
+            credentials_dict=creds_dict,
             database=database_name,
         )
         print("  ✓ Backend initialized\n")
@@ -708,15 +709,6 @@ async def main():
 
         traceback.print_exc()
         sys.exit(1)
-    finally:
-        # Cleanup credentials file
-        try:
-            creds_file = Path(creds_path)
-            if creds_file.exists():
-                creds_file.unlink()
-                print("  ✓ Cleaned up temporary credentials file")
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":
