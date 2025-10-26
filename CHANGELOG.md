@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-10-26
+
+### Added
+- Added py.typed marker file for PEP 561 compliance, enabling type checking for downstream users
+
 ## [0.6.0] - 2025-10-23
 
 ### Changed
