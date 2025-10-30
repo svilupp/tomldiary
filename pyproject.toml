@@ -125,3 +125,38 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Start relaxed, will tighten per-module
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+files = ["src/tomldiary", "tests"]
+
+# Per-module options for gradual strict typing adoption
+[[tool.mypy.overrides]]
+module = "tomldiary.models"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tomldiary.loaders"
+disallow_untyped_defs = true
+
+# Ignore external packages without type stubs
+[[tool.mypy.overrides]]
+module = [
+    "thefuzz.*",
+    "tomli_w.*",
+    "textprompts.*",
+    "google.*",
+    "loguru.*",
+]
+ignore_missing_imports = true

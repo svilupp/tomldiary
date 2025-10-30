@@ -208,14 +208,14 @@ class FirestoreBackend:
 
             if doc.exists:
                 data = doc.to_dict()
-                content = data.get("content")
+                if data:
+                    content = data.get("content")
+                    if isinstance(content, str):
+                        logger.debug(f"Read {kind} for user {user_id}: {len(content)} chars")
+                        return content
 
-                if content is not None:
-                    logger.debug(f"Read {kind} for user {user_id}: {len(content)} chars")
-                    return content
-                else:
-                    logger.warning(f"Document exists but has no content: {user_id}/{kind}")
-                    return None
+                logger.warning(f"Document exists but has no valid content: {user_id}/{kind}")
+                return None
             else:
                 logger.debug(f"No {kind} found for user {user_id}")
                 return None
@@ -278,7 +278,7 @@ class FirestoreBackend:
             loop = asyncio.get_event_loop()
             doc = await loop.run_in_executor(None, doc_ref.get)
 
-            return doc.exists
+            return bool(doc.exists)
 
         except Exception as e:
             logger.error(f"Failed to check existence for {user_id}/{kind}: {e}")

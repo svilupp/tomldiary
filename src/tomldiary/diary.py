@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import tomllib
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Protocol
 
 import tomli_w
-from pydantic_ai import format_as_xml
+from pydantic import BaseModel
+from pydantic_ai import Agent, format_as_xml
 from pydantic_ai.models import Model
 
 from .compaction import (
@@ -16,18 +20,29 @@ from .models import _MODEL_VERSION, ConversationItem, MemoryDeps
 from .pretty_print import ConversationsPrinter, PreferencesPrinter
 from .utils import extract_categories_from_schema
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+# Backend protocol for type checking
+class BackendProtocol(Protocol):
+    """Protocol defining the backend interface."""
+
+    async def load(self, user_id: str, kind: str) -> str | None: ...
+    async def save(self, user_id: str, kind: str, content: str) -> None: ...
+
 
 class Diary:
     def __init__(
         self,
-        backend,
-        pref_table_cls,
-        agent=None,
-        max_prefs_per_category=100,
-        max_conversations=100,
+        backend: BackendProtocol,
+        pref_table_cls: type[BaseModel],
+        agent: str | Model | Agent[MemoryDeps] | None = None,
+        max_prefs_per_category: int = 100,
+        max_conversations: int = 100,
         compaction_config: CompactionConfig | None = None,
-        compactor=None,
-    ):
+        compactor: Agent[CompactionDeps] | None = None,
+    ) -> None:
         self.backend = backend
         self.pref_table_cls = pref_table_cls
         cats = extract_categories_from_schema(pref_table_cls)
@@ -47,13 +62,13 @@ class Diary:
             self.compactor = compactor_agent()
 
     # ------------ helpers ------------
-    async def _load(self, user_id, kind):
+    async def _load(self, user_id: str, kind: str) -> str:
         return await self.backend.load(user_id, kind) or ""
 
-    async def _save(self, user_id, kind, content):
+    async def _save(self, user_id: str, kind: str, content: str) -> None:
         return await self.backend.save(user_id, kind, content)
 
-    async def _load_prefs(self, user_id):
+    async def _load_prefs(self, user_id: str) -> dict[str, Any]:
         prefs_blob = await self._load(user_id, "preferences")
         if prefs_blob:
             prefs = tomllib.loads(prefs_blob)
@@ -64,7 +79,7 @@ class Diary:
             }
         return prefs
 
-    async def _load_convs(self, user_id):
+    async def _load_convs(self, user_id: str) -> dict[str, Any]:
         convs_blob = await self._load(user_id, "conversations")
         if convs_blob:
             convs = tomllib.loads(convs_blob)
@@ -92,13 +107,13 @@ class Diary:
             }
         return convs
 
-    async def _save_prefs(self, user_id, prefs):
+    async def _save_prefs(self, user_id: str, prefs: dict[str, Any]) -> None:
         await self._save(user_id, "preferences", tomli_w.dumps(prefs))
 
-    async def _save_convs(self, user_id, convs):
+    async def _save_convs(self, user_id: str, convs: dict[str, Any]) -> None:
         await self._save(user_id, "conversations", tomli_w.dumps(convs))
 
-    async def build_deps(self, user_id, session_id):
+    async def build_deps(self, user_id: str, session_id: str) -> MemoryDeps:
         prefs = await self._load_prefs(user_id)
         convs = await self._load_convs(user_id)
 
@@ -109,7 +124,7 @@ class Diary:
 
         return deps
 
-    async def ensure_session(self, user_id: str, session_id: str):
+    async def ensure_session(self, user_id: str, session_id: str) -> bool:
         """Create session if needed, return whether it's new"""
         convs = await self._load_convs(user_id)
         if session_id not in convs["conversations"]:
@@ -128,7 +143,7 @@ class Diary:
         return False
 
     # ------------ preference management ------------
-    async def _enforce_preference_limits(self, prefs):
+    async def _enforce_preference_limits(self, prefs: dict[str, Any]) -> None:
         """Enforce max preferences per category by removing low-count items"""
         preferences = prefs.get("preferences", {})
         for category, items in preferences.items():
@@ -139,7 +154,7 @@ class Diary:
                 )
                 preferences[category] = dict(sorted_items[: self.max_prefs_per_category])
 
-    def _preference_compaction_stats(self, prefs) -> CompactionStats:
+    def _preference_compaction_stats(self, prefs: dict[str, Any]) -> CompactionStats:
         preferences = prefs.get("preferences", {})
         total_chars = len(tomli_w.dumps({"preferences": preferences}))
         largest_block = 0
@@ -148,7 +163,7 @@ class Diary:
                 largest_block = max(largest_block, len(data.get("text", "")))
         return CompactionStats(total_chars=total_chars, largest_block=largest_block)
 
-    def _conversation_compaction_stats(self, convs) -> CompactionStats:
+    def _conversation_compaction_stats(self, convs: dict[str, Any]) -> CompactionStats:
         conversations = convs.get("conversations", {})
         total_chars = len(tomli_w.dumps({"conversations": conversations}))
         largest_block = 0
@@ -267,7 +282,7 @@ class Diary:
         return True
 
     # ------------ main hook ------------
-    async def update_memory(self, user_id, session_id, user_msg, assistant_msg):
+    async def update_memory(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str) -> None:
         # Ensure session exists
         await self.ensure_session(user_id, session_id)
 
@@ -318,7 +333,7 @@ class Diary:
         await self._save_convs(user_id, deps.convs)
 
     # ------------ quick introspection ------------
-    async def preferences(self, user_id, skip_metadata=False):  # raw TOML string
+    async def preferences(self, user_id: str, skip_metadata: bool = False) -> str:  # raw TOML string
         prefs_str = await self._load(user_id, "preferences")
         if skip_metadata and prefs_str:
             prefs = tomllib.loads(prefs_str)
@@ -327,7 +342,7 @@ class Diary:
             return tomli_w.dumps(prefs)
         return prefs_str
 
-    async def last_conversations(self, user_id, limit=3, skip_metadata=False):
+    async def last_conversations(self, user_id: str, limit: int = 3, skip_metadata: bool = False) -> dict[str, Any]:
         convs = await self._load_convs(user_id)
         # Get conversations from nested structure
         conv_entries = convs.get("conversations", {})
@@ -343,8 +358,8 @@ class Diary:
 
     # ------------ pretty printing ------------
     async def pretty_preferences(
-        self, user_id, skip_metadata=True, fields=None, show_count=True, show_timestamps=True
-    ):
+        self, user_id: str, skip_metadata: bool = True, fields: set[str] | None = None, show_count: bool = True, show_timestamps: bool = True
+    ) -> str:
         """Get user preferences in a pretty printed format."""
         prefs_toml = await self.preferences(user_id, skip_metadata=False)
         if not prefs_toml:
@@ -356,8 +371,8 @@ class Diary:
         return printer.format_preferences(prefs_toml, skip_metadata=skip_metadata)
 
     async def pretty_conversations(
-        self, user_id, limit=None, skip_metadata=True, fields=None, show_turns=True
-    ):
+        self, user_id: str, limit: int | None = None, skip_metadata: bool = True, fields: set[str] | None = None, show_turns: bool = True
+    ) -> str:
         """Get user conversations in a pretty printed format."""
         # Use all conversations if no limit specified
         if limit is None:

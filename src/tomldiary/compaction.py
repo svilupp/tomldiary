@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from pydantic_ai import Agent, Tool
 from textprompts import Prompt
@@ -124,11 +125,12 @@ class CompactionDeps:
             raise ValueError("Preference block id must be in 'category/id' format") from exc
         return category, pref_id
 
-    def get_preference_block(self, block_id: str) -> dict:
+    def get_preference_block(self, block_id: str) -> dict[str, Any]:
         if not self.include_preferences:
             raise ValueError("Preference compaction disabled for this run")
         category, pref_id = self._split_pref_block(block_id)
-        return self.prefs.get("preferences", {}).get(category, {}).get(pref_id, {})
+        result: dict[str, Any] = self.prefs.get("preferences", {}).get(category, {}).get(pref_id, {})
+        return result
 
     def rewrite_preference_block(
         self,
@@ -158,10 +160,11 @@ class CompactionDeps:
                 prefs_root.pop(category, None)
 
     # ───────── conversation helpers ─────────
-    def get_conversation_block(self, session_id: str) -> dict:
+    def get_conversation_block(self, session_id: str) -> dict[str, Any]:
         if not self.include_conversations:
             raise ValueError("Conversation compaction disabled for this run")
-        return self.convs.get("conversations", {}).get(session_id, {})
+        result: dict[str, Any] = self.convs.get("conversations", {}).get(session_id, {})
+        return result
 
     def rewrite_conversation_block(
         self,

@@ -9,10 +9,11 @@ from collections.abc import Callable, Sequence
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import tomli_w
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent, ModelHTTPError, ModelRetry, RunContext, Tool
 from pydantic_ai.models import KnownModelName, Model
 from pydantic_ai.models.fallback import FallbackModel
@@ -62,14 +63,14 @@ def _clone_model(model: ModelInput) -> ModelInput:
 
 
 def extractor_agent(
-    pref_table_cls,
+    pref_table_cls: type[BaseModel],
     model: ModelInput | None = None,
     prompt_template: str | Path | Prompt | None = None,
     fallback_retries: int = 3,
     fallback_on: Callable[[Exception], bool] | Sequence[type[Exception]] | None = None,
     *,
     model_name: ModelInput | None = None,
-):  # pragma: no cover - CLI helper
+) -> Agent[MemoryDeps]:  # pragma: no cover - CLI helper
     """Build an extraction agent for the given preference table class."""
 
     if model_name is not None:
@@ -119,16 +120,15 @@ def extractor_agent(
     if fallback_on is None:
         fallback_on = (ModelHTTPError, ValidationError, httpx.TimeoutException)
 
-    if (
-        isinstance(fallback_on, Sequence)
-        and not isinstance(fallback_on, str)
-        and not callable(fallback_on)
-    ):
-        fallback_on_param: Callable[[Exception], bool] | tuple[type[Exception], ...] = tuple(
-            fallback_on
-        )
-    else:
+    # Type narrowing for fallback_on parameter
+    fallback_on_param: Callable[[Exception], bool] | tuple[type[Exception], ...]
+    if callable(fallback_on):
         fallback_on_param = fallback_on
+    elif isinstance(fallback_on, tuple):
+        fallback_on_param = fallback_on
+    else:
+        # Convert sequence to tuple - safe because we checked it's not callable or tuple
+        fallback_on_param = tuple(fallback_on)
 
     model_input: ModelInput = model or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")  # type: ignore[assignment]
 
@@ -168,10 +168,10 @@ def extractor_agent(
 
 
 def build_extractor(
-    pref_table_cls,
+    pref_table_cls: type[BaseModel],
     model_name: str | None = None,
     prompt_template_path: str | Path | Prompt | None = None,
-):  # pragma: no cover - legacy alias
+) -> Agent[MemoryDeps]:  # pragma: no cover - legacy alias
     """Backward compatible alias for :func:`extractor_agent`."""
 
     return extractor_agent(

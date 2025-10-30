@@ -148,7 +148,7 @@ class ConversationLoader:
         >>> print(type(convs))  # dict[str, ConversationItem]
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the conversation loader."""
         self.adapter = TypeAdapter(dict[str, ConversationItem])
 
