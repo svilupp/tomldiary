@@ -26,10 +26,35 @@ if TYPE_CHECKING:
 
 # Backend protocol for type checking
 class BackendProtocol(Protocol):
-    """Protocol defining the backend interface."""
+    """Protocol defining the complete backend interface.
 
-    async def load(self, user_id: str, kind: str) -> str | None: ...
-    async def save(self, user_id: str, kind: str, content: str) -> None: ...
+    All backend implementations (LocalBackend, FirestoreBackend) must implement
+    these methods for full compatibility.
+    """
+
+    async def load(self, user_id: str, kind: str) -> str | None:
+        """Load TOML content for a user and kind."""
+        ...
+
+    async def save(self, user_id: str, kind: str, content: str) -> None:
+        """Save TOML content for a user and kind."""
+        ...
+
+    async def exists(self, user_id: str, kind: str) -> bool:
+        """Check if a document exists for a user."""
+        ...
+
+    async def delete(self, user_id: str, kind: str) -> None:
+        """Delete a specific document for a user."""
+        ...
+
+    async def delete_user(self, user_id: str) -> None:
+        """Delete all data for a user."""
+        ...
+
+    async def list_users(self) -> list[str]:
+        """List all user IDs with stored data."""
+        ...
 
 
 class Diary:
