@@ -55,7 +55,9 @@ class MemoryWriter:
         self._failed_count = 0
         self._active_workers = 0
 
-    async def submit(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str) -> None:
+    async def submit(
+        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+    ) -> None:
         """Submit a memory update request to the queue (may block on backpressure)."""
         with self._state_lock:
             if not self._accepting:
@@ -108,7 +110,9 @@ class MemoryWriter:
         except Exception as e:
             log.exception(f"Memory worker {worker_id} crashed: {e}")
 
-    async def _process(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str) -> None:
+    async def _process(
+        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+    ) -> None:
         """Process a single memory update."""
         await self.diary.update_memory(user_id, session_id, user_msg, assistant_msg)
 

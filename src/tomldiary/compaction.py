@@ -129,7 +129,9 @@ class CompactionDeps:
         if not self.include_preferences:
             raise ValueError("Preference compaction disabled for this run")
         category, pref_id = self._split_pref_block(block_id)
-        result: dict[str, Any] = self.prefs.get("preferences", {}).get(category, {}).get(pref_id, {})
+        result: dict[str, Any] = (
+            self.prefs.get("preferences", {}).get(category, {}).get(pref_id, {})
+        )
         return result
 
     def rewrite_preference_block(

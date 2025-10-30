@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tomllib
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 import tomli_w
 from pydantic import BaseModel
@@ -19,9 +19,6 @@ from .extractor_factory import extractor_agent
 from .models import _MODEL_VERSION, ConversationItem, MemoryDeps
 from .pretty_print import ConversationsPrinter, PreferencesPrinter
 from .utils import extract_categories_from_schema
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 # Backend protocol for type checking
@@ -307,7 +304,9 @@ class Diary:
         return True
 
     # ------------ main hook ------------
-    async def update_memory(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str) -> None:
+    async def update_memory(
+        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+    ) -> None:
         # Ensure session exists
         await self.ensure_session(user_id, session_id)
 
@@ -358,7 +357,9 @@ class Diary:
         await self._save_convs(user_id, deps.convs)
 
     # ------------ quick introspection ------------
-    async def preferences(self, user_id: str, skip_metadata: bool = False) -> str:  # raw TOML string
+    async def preferences(
+        self, user_id: str, skip_metadata: bool = False
+    ) -> str:  # raw TOML string
         prefs_str = await self._load(user_id, "preferences")
         if skip_metadata and prefs_str:
             prefs = tomllib.loads(prefs_str)
@@ -367,7 +368,9 @@ class Diary:
             return tomli_w.dumps(prefs)
         return prefs_str
 
-    async def last_conversations(self, user_id: str, limit: int = 3, skip_metadata: bool = False) -> dict[str, Any]:
+    async def last_conversations(
+        self, user_id: str, limit: int = 3, skip_metadata: bool = False
+    ) -> dict[str, Any]:
         convs = await self._load_convs(user_id)
         # Get conversations from nested structure
         conv_entries = convs.get("conversations", {})
@@ -383,7 +386,12 @@ class Diary:
 
     # ------------ pretty printing ------------
     async def pretty_preferences(
-        self, user_id: str, skip_metadata: bool = True, fields: set[str] | None = None, show_count: bool = True, show_timestamps: bool = True
+        self,
+        user_id: str,
+        skip_metadata: bool = True,
+        fields: set[str] | None = None,
+        show_count: bool = True,
+        show_timestamps: bool = True,
     ) -> str:
         """Get user preferences in a pretty printed format."""
         prefs_toml = await self.preferences(user_id, skip_metadata=False)
@@ -396,7 +404,12 @@ class Diary:
         return printer.format_preferences(prefs_toml, skip_metadata=skip_metadata)
 
     async def pretty_conversations(
-        self, user_id: str, limit: int | None = None, skip_metadata: bool = True, fields: set[str] | None = None, show_turns: bool = True
+        self,
+        user_id: str,
+        limit: int | None = None,
+        skip_metadata: bool = True,
+        fields: set[str] | None = None,
+        show_turns: bool = True,
     ) -> str:
         """Get user conversations in a pretty printed format."""
         # Use all conversations if no limit specified

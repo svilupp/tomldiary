@@ -9,7 +9,6 @@ from collections.abc import Callable, Sequence
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
 import tomli_w
@@ -122,9 +121,7 @@ def extractor_agent(
 
     # Type narrowing for fallback_on parameter
     fallback_on_param: Callable[[Exception], bool] | tuple[type[Exception], ...]
-    if callable(fallback_on):
-        fallback_on_param = fallback_on
-    elif isinstance(fallback_on, tuple):
+    if callable(fallback_on) or isinstance(fallback_on, tuple):
         fallback_on_param = fallback_on
     else:
         # Convert sequence to tuple - safe because we checked it's not callable or tuple
