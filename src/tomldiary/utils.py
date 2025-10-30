@@ -1,7 +1,11 @@
 """Utility functions for tomldiary."""
 
+from __future__ import annotations
 
-def extract_categories_from_schema(pref_table_cls) -> list[str]:
+from pydantic import BaseModel
+
+
+def extract_categories_from_schema(pref_table_cls: type[BaseModel]) -> list[str]:
     """Extract allowed categories from a preference table class.
 
     Args:

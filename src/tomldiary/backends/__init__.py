@@ -1,10 +1,9 @@
-"""
-Backend implementations for Diary storage.
-"""
+"""Backend implementations and typing contracts for diary storage."""
 
+from .base import BackendProtocol
 from .local import LocalBackend
 
-__all__ = ["LocalBackend"]
+__all__ = ["BackendProtocol", "LocalBackend"]
 
 # Optional Firestore backend - requires 'tomldiary[firestore]' installation
 try:

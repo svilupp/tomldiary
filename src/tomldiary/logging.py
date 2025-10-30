@@ -17,10 +17,16 @@ Example:
     logger.debug("Debug details", extra_data=value)
 """
 
+from __future__ import annotations
+
 import os
 import sys
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from loguru import Logger
 
 # Remove default handler to reconfigure
 logger.remove()
@@ -49,7 +55,7 @@ if log_file:
     )
 
 
-def get_logger(name: str):
+def get_logger(name: str) -> Logger:
     """Get a logger instance for the given module name.
 
     Args:
@@ -65,7 +71,7 @@ def get_logger(name: str):
     return logger.bind(name=name)
 
 
-def configure_stdlib_logging_intercept():
+def configure_stdlib_logging_intercept() -> None:
     """Configure loguru to intercept standard library logging.
 
     This is useful for libraries that use standard logging.

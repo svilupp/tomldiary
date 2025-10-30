@@ -13,7 +13,7 @@ from pathlib import Path
 from .schema import show_conversations_schema, show_preferences_schema
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="tomldiary",
@@ -65,7 +65,7 @@ def main():
         sys.exit(1)
 
 
-def _handle_preferences_schema(class_path: str, format: str):
+def _handle_preferences_schema(class_path: str, format: str) -> None:
     """Handle preferences schema command."""
     from typing import Literal, cast
 
@@ -115,7 +115,7 @@ def _handle_preferences_schema(class_path: str, format: str):
         sys.exit(1)
 
 
-def _handle_conversations_schema(format: str):
+def _handle_conversations_schema(format: str) -> None:
     """Handle conversations schema command."""
     from typing import Literal, cast
 
@@ -128,7 +128,7 @@ def _handle_conversations_schema(format: str):
         sys.exit(1)
 
 
-def cli():
+def cli() -> None:
     """CLI entry point for backwards compatibility."""
     main()
 

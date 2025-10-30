@@ -1,10 +1,18 @@
 """Tests for tomldiary models."""
 
 import tomllib
+from typing import cast
 
 import tomli_w
 
-from tomldiary.models import ConversationItem, MemoryDeps, MetaInfo, PreferenceItem
+from tomldiary.models import (
+    ConversationItem,
+    ConversationsStore,
+    MemoryDeps,
+    MetaInfo,
+    PreferenceItem,
+    PreferencesStore,
+)
 
 
 class TestPreferenceItem:
@@ -101,16 +109,16 @@ class TestMemoryDeps:
     def test_creation(self):
         """Test MemoryDeps creation."""
         deps = MemoryDeps(
-            prefs={"preferences": {}},
-            convs={"session1": {}},
+            prefs=cast(PreferencesStore, {"_meta": {}, "preferences": {}}),
+            convs=cast(ConversationsStore, {"_meta": {}, "conversations": {"session1": {}}}),
             allowed_cats=["like", "dislike"],
             schema_name="TestSchema",
             session_id="session123",
             max_prefs_per_category=50,
         )
 
-        assert deps.prefs == {"preferences": {}}
-        assert deps.convs == {"session1": {}}
+        assert deps.prefs["preferences"] == {}
+        assert "session1" in deps.convs["conversations"]
         assert deps.allowed_cats == ["like", "dislike"]
         assert deps.schema_name == "TestSchema"
         assert deps.session_id == "session123"
@@ -119,8 +127,8 @@ class TestMemoryDeps:
     def test_pretty_prefs_empty(self):
         """Test pretty_prefs with empty preferences."""
         deps = MemoryDeps(
-            prefs={"preferences": {}},
-            convs={},
+            prefs=cast(PreferencesStore, {"_meta": {}, "preferences": {}}),
+            convs=cast(ConversationsStore, {"_meta": {}, "conversations": {}}),
             allowed_cats=[],
             schema_name="Test",
             session_id="test123",
@@ -131,15 +139,19 @@ class TestMemoryDeps:
     def test_pretty_prefs_with_data(self):
         """Test pretty_prefs with actual data."""
         deps = MemoryDeps(
-            prefs={
-                "preferences": {
-                    "like": {
-                        "pizza": {"text": "loves pizza", "_count": 2},
-                        "coffee": {"text": "loves coffee", "_count": 1},
-                    }
-                }
-            },
-            convs={},
+            prefs=cast(
+                PreferencesStore,
+                {
+                    "_meta": {},
+                    "preferences": {
+                        "like": {
+                            "pizza": {"text": "loves pizza", "_count": 2},
+                            "coffee": {"text": "loves coffee", "_count": 1},
+                        }
+                    },
+                },
+            ),
+            convs=cast(ConversationsStore, {"_meta": {}, "conversations": {}}),
             allowed_cats=["like"],
             schema_name="Test",
             session_id="test123",
@@ -152,17 +164,22 @@ class TestMemoryDeps:
     def test_pretty_session(self):
         """Test pretty_session formatting."""
         deps = MemoryDeps(
-            prefs={},
-            convs={
-                "conversations": {
-                    "session1": {
-                        "_created": "2024-01-01T00:00:00Z",
-                        "_turns": 5,
-                        "summary": "Chat about food preferences",
-                        "keywords": ["food", "pizza", "coffee"],
-                    }
-                }
-            },
+            prefs=cast(PreferencesStore, {"_meta": {}, "preferences": {}}),
+            convs=cast(
+                ConversationsStore,
+                {
+                    "_meta": {},
+                    "conversations": {
+                        "session1": {
+                            "_created": "2024-01-01T00:00:00Z",
+                            "_updated": "2024-01-01T00:01:00Z",
+                            "_turns": 5,
+                            "summary": "Chat about food preferences",
+                            "keywords": ["food", "pizza", "coffee"],
+                        }
+                    },
+                },
+            ),
             allowed_cats=[],
             schema_name="Test",
             session_id="session1",

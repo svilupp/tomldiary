@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import os
 import threading
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
+from .diary import Diary
 from .logging import get_logger
 
 log = get_logger(__name__)
@@ -11,11 +16,13 @@ QUEUE_MAXSIZE = 1000
 WORKERS = max(8, (os.cpu_count() or 1) * 2)
 SHUTDOWN_TIMEOUT = 30
 
+T = TypeVar("T")
+
 # Global task registry to prevent garbage collection
-background_tasks: set[asyncio.Task] = set()
+background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def fire_and_forget(coro, *, name=None):
+def fire_and_forget(coro: Coroutine[Any, Any, T], *, name: str | None = None) -> asyncio.Task[T]:
     """Create a background task with proper lifecycle management."""
     task = asyncio.create_task(coro, name=name)
     background_tasks.add(task)
@@ -31,9 +38,9 @@ def fire_and_forget(coro, *, name=None):
 class MemoryWriter:
     """Queue-based memory writer with worker pool for concurrent processing."""
 
-    def __init__(self, diary, *, workers=WORKERS, qsize=QUEUE_MAXSIZE):
+    def __init__(self, diary: Diary, *, workers: int = WORKERS, qsize: int = QUEUE_MAXSIZE) -> None:
         self.diary = diary
-        self.q = asyncio.Queue(maxsize=qsize)
+        self.q: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue(maxsize=qsize)
 
         # Synchronization lock for counters/state. Use threading.Lock so synchronous stats()
         # can take a consistent snapshot without awaiting.
@@ -51,7 +58,9 @@ class MemoryWriter:
         self._failed_count = 0
         self._active_workers = 0
 
-    async def submit(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str):
+    async def submit(
+        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+    ) -> None:
         """Submit a memory update request to the queue (may block on backpressure)."""
         with self._state_lock:
             if not self._accepting:
@@ -61,7 +70,7 @@ class MemoryWriter:
         # Queue operations are thread-safe, can be done outside lock
         await self.q.put((user_id, session_id, user_msg, assistant_msg))
 
-    async def _worker(self, worker_id: int):
+    async def _worker(self, worker_id: int) -> None:
         """Worker task that processes memory updates from the queue."""
         log.debug(f"Memory worker {worker_id} started")
         try:
@@ -104,7 +113,9 @@ class MemoryWriter:
         except Exception as e:
             log.exception(f"Memory worker {worker_id} crashed: {e}")
 
-    async def _process(self, user_id: str, session_id: str, user_msg: str, assistant_msg: str):
+    async def _process(
+        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+    ) -> None:
         """Process a single memory update."""
         await self.diary.update_memory(user_id, session_id, user_msg, assistant_msg)
 
@@ -170,7 +181,7 @@ class MemoryWriter:
         """
         return self._accepting
 
-    async def close(self):
+    async def close(self) -> None:
         """Gracefully shutdown the writer and all workers."""
         log.info("Shutting down MemoryWriter...")
 
@@ -201,7 +212,7 @@ class MemoryWriter:
         log.info("MemoryWriter shutdown complete")
 
 
-async def shutdown_all_background_tasks(timeout=SHUTDOWN_TIMEOUT):
+async def shutdown_all_background_tasks(timeout: int = SHUTDOWN_TIMEOUT) -> None:
     """Shutdown all background tasks gracefully."""
     if not background_tasks:
         return

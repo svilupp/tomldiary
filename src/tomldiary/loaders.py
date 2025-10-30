@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
@@ -66,7 +67,7 @@ class PreferenceLoader:
         data = tomllib.loads(toml_str)
 
         # Extract the preferences section
-        prefs_data = data.get("preferences", {})
+        prefs_data: dict[str, Any] = data.get("preferences", {}) or {}
 
         # Validate and construct the preference table
         return self.adapter.validate_python(prefs_data)
@@ -95,7 +96,9 @@ class PreferenceLoader:
         prefs_data = data.get("preferences", {})
         return self.adapter.validate_python(prefs_data)
 
-    def validate_partial(self, category: str, data: dict[str, dict]) -> dict[str, PreferenceItem]:
+    def validate_partial(
+        self, category: str, data: dict[str, dict[str, Any]]
+    ) -> dict[str, PreferenceItem]:
         """Validate a single category's data.
 
         Args:
@@ -148,7 +151,7 @@ class ConversationLoader:
         >>> print(type(convs))  # dict[str, ConversationItem]
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the conversation loader."""
         self.adapter = TypeAdapter(dict[str, ConversationItem])
 

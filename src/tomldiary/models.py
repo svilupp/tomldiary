@@ -2,10 +2,61 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, Field
 
 _MODEL_VERSION = "0.3"
+
+
+# ───────── TypedDict definitions for runtime dict structures ─────────
+# These define the structure of preferences/conversations as stored in TOML.
+# Note: Users still provide BaseModel subclasses to Diary for schema definition
+# and AI extraction. TypedDicts are only for internal runtime dict representations.
+
+
+class PreferenceItemDict(TypedDict):
+    """Dict representation of a PreferenceItem as stored in TOML."""
+
+    text: str
+    contexts: list[str]
+    _count: int
+    _created: str
+    _updated: str
+    _created_by: str
+    _updated_by: str
+
+
+class ConversationItemDict(TypedDict):
+    """Dict representation of a ConversationItem as stored in TOML."""
+
+    _created: str
+    _updated: str
+    _turns: int
+    summary: str
+    keywords: list[str]
+
+
+class MetaDict(TypedDict, total=False):
+    """Metadata section in both preferences and conversations stores."""
+
+    version: str
+    schema_name: str
+    compaction: NotRequired[dict[str, Any]]
+
+
+class PreferencesStore(TypedDict):
+    """Structure of the preferences store: _meta + preferences by category."""
+
+    _meta: MetaDict
+    preferences: dict[str, dict[str, PreferenceItemDict]]
+
+
+class ConversationsStore(TypedDict):
+    """Structure of the conversations store: _meta + conversations by session."""
+
+    _meta: MetaDict
+    conversations: dict[str, ConversationItemDict]
 
 
 # ───────── metadata for TOML files ─────────
@@ -61,8 +112,8 @@ class ConversationItem(BaseModel):
 # ───────── deps object passed into the extractor ─────────
 @dataclass
 class MemoryDeps:
-    prefs: dict  # full preferences dict
-    convs: dict  # full conversations dict
+    prefs: PreferencesStore
+    convs: ConversationsStore
     allowed_cats: list[str]  # whitelist derived from table class
     schema_name: str  # name of the preference table class
     session_id: str  # current session_id for tracking created_by/updated_by

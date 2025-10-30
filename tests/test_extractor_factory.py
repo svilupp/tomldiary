@@ -5,11 +5,12 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.test import TestModel
 from textprompts import Prompt
 
-from src.tomldiary.extractor_factory import (
+from tomldiary.extractor_factory import (
     extractor_agent,
     extractor_prompt_check,
 )
-from tests.test_user_pref_table import MyPrefTable
+
+from .test_user_pref_table import MyPrefTable
 
 
 def test_fallback_model_creation(monkeypatch):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from pydantic_ai import RunContext
 from thefuzz import fuzz
@@ -215,7 +216,7 @@ async def upsert_preference(
 
     if is_new:
         # Creating new preference
-        tbl = {
+        tbl: dict[str, Any] = {
             "_created": now,
             "_updated": now,
             "_count": 1,
@@ -224,21 +225,24 @@ async def upsert_preference(
             "_updated_by": session_id,
             "text": text,
         }
-        cat_tbl[id] = tbl
+        cat_tbl[id] = cast(Any, tbl)
         return f"✅ Created {category}/{id}: '{text}'."
     else:
         # Updating existing preference
-        tbl = cat_tbl[id]
+        tbl = cast(dict[str, Any], cat_tbl[id])
         tbl["_updated"] = now
         tbl["_updated_by"] = session_id
         tbl["text"] = text
-        tbl["contexts"] = list(set(tbl["contexts"] + contexts))
+        existing_contexts = tbl.get("contexts", [])
+        if isinstance(existing_contexts, list):
+            tbl["contexts"] = list(set(existing_contexts + contexts))
 
         # Auto-increment count unless suppressed
-        if not suppress_count_increment:
-            tbl["_count"] += 1
+        existing_count = tbl.get("_count", 0)
+        if not suppress_count_increment and isinstance(existing_count, int):
+            tbl["_count"] = existing_count + 1
 
-        return f"✅ Updated {category}/{id}: '{text}' (count: {tbl['_count']})."
+        return f"✅ Updated {category}/{id}: '{text}' (count: {tbl.get('_count', 0)})."
 
 
 async def forget_preference(
