@@ -7,7 +7,7 @@ and conversation items. Useful for API design, documentation, and type validatio
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -15,7 +15,7 @@ from .models import ConversationItem
 from .utils import extract_categories_from_schema
 
 
-def get_preferences_schema(pref_table_cls: type[BaseModel]) -> dict:
+def get_preferences_schema(pref_table_cls: type[BaseModel]) -> dict[str, Any]:
     """Get structured schema information for a preference table class.
 
     Args:
@@ -38,11 +38,11 @@ def get_preferences_schema(pref_table_cls: type[BaseModel]) -> dict:
         ['favorite_foods', 'cooking_techniques', ...]
     """
     categories = extract_categories_from_schema(pref_table_cls)
-    json_schema = pref_table_cls.model_json_schema()
+    json_schema: dict[str, Any] = pref_table_cls.model_json_schema()
 
     # Extract type annotations and descriptions
-    category_types = {}
-    descriptions = {}
+    category_types: dict[str, str] = {}
+    descriptions: dict[str, str] = {}
 
     for category in categories:
         field_info = pref_table_cls.model_fields.get(category)
@@ -68,7 +68,7 @@ def get_preferences_schema(pref_table_cls: type[BaseModel]) -> dict:
     }
 
 
-def get_conversations_schema() -> dict:
+def get_conversations_schema() -> dict[str, Any]:
     """Get structured schema information for conversation items.
 
     Returns:
@@ -82,7 +82,7 @@ def get_conversations_schema() -> dict:
         >>> print(schema["fields"])
         ['created', 'updated', 'turns', 'summary', 'keywords']
     """
-    json_schema = ConversationItem.model_json_schema()
+    json_schema: dict[str, Any] = ConversationItem.model_json_schema()
     fields = list(ConversationItem.model_fields.keys())
 
     return {
@@ -92,7 +92,9 @@ def get_conversations_schema() -> dict:
     }
 
 
-def _format_schema_pretty(schema_info: dict, kind: Literal["preferences", "conversations"]) -> str:
+def _format_schema_pretty(
+    schema_info: dict[str, Any], kind: Literal["preferences", "conversations"]
+) -> str:
     """Format schema as a pretty tree structure.
 
     Args:
@@ -102,7 +104,7 @@ def _format_schema_pretty(schema_info: dict, kind: Literal["preferences", "conve
     Returns:
         Formatted tree string
     """
-    lines = []
+    lines: list[str] = []
     lines.append(f"{schema_info['schema_name']}")
     lines.append("")
 
@@ -132,12 +134,12 @@ def _format_schema_pretty(schema_info: dict, kind: Literal["preferences", "conve
     else:  # conversations
         fields = schema_info["fields"]
         json_schema = schema_info["json_schema"]
-        properties = json_schema.get("properties", {})
+        properties: dict[str, Any] = json_schema.get("properties", {})
 
         # Map field names to their serialization names (handle aliases)
         from .models import ConversationItem
 
-        field_aliases = {
+        field_aliases: dict[str, str] = {
             name: field.serialization_alias or name
             for name, field in ConversationItem.model_fields.items()
         }
@@ -164,7 +166,7 @@ def _format_schema_pretty(schema_info: dict, kind: Literal["preferences", "conve
     return "\n".join(lines)
 
 
-def _format_schema_json(schema_info: dict) -> str:
+def _format_schema_json(schema_info: dict[str, Any]) -> str:
     """Format schema as JSON.
 
     Args:
@@ -176,7 +178,9 @@ def _format_schema_json(schema_info: dict) -> str:
     return json.dumps(schema_info["json_schema"], indent=2)
 
 
-def _format_schema_python(schema_info: dict, kind: Literal["preferences", "conversations"]) -> str:
+def _format_schema_python(
+    schema_info: dict[str, Any], kind: Literal["preferences", "conversations"]
+) -> str:
     """Format schema as Python type hints.
 
     Args:
@@ -186,7 +190,7 @@ def _format_schema_python(schema_info: dict, kind: Literal["preferences", "conve
     Returns:
         Python class definition with type hints
     """
-    lines = []
+    lines: list[str] = []
     lines.append("from pydantic import BaseModel, Field")
     lines.append("from tomldiary import PreferenceItem, ConversationItem")
     lines.append("")
@@ -231,7 +235,7 @@ def _format_schema_python(schema_info: dict, kind: Literal["preferences", "conve
                 field_type = field_schema.get("type", "str")
 
                 # Map JSON types to Python types
-                type_map = {
+                type_map: dict[str, str] = {
                     "string": "str",
                     "integer": "int",
                     "array": "list[str]",  # Simplified

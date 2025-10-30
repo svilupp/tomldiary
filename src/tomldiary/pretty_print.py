@@ -176,14 +176,14 @@ class ConversationsPrinter(BasePrettyPrinter):
         return "\n".join(output).rstrip()
 
 
-def pretty_print_preferences(prefs_toml: str, skip_metadata: bool = True, **kwargs) -> str:
+def pretty_print_preferences(prefs_toml: str, skip_metadata: bool = True, **kwargs: Any) -> str:
     """Convenience function to pretty print preferences."""
     printer = PreferencesPrinter(**kwargs)
     return printer.format_preferences(prefs_toml, skip_metadata=skip_metadata)
 
 
 def pretty_print_conversations(
-    convs_dict: dict[str, Any], skip_metadata: bool = True, **kwargs
+    convs_dict: dict[str, Any], skip_metadata: bool = True, **kwargs: Any
 ) -> str:
     """Convenience function to pretty print conversations."""
     printer = ConversationsPrinter(**kwargs)

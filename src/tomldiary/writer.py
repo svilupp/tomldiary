@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
-from typing import Any
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 from .diary import Diary
 from .logging import get_logger
@@ -15,11 +16,13 @@ QUEUE_MAXSIZE = 1000
 WORKERS = max(8, (os.cpu_count() or 1) * 2)
 SHUTDOWN_TIMEOUT = 30
 
+T = TypeVar("T")
+
 # Global task registry to prevent garbage collection
 background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def fire_and_forget(coro: Any, *, name: str | None = None) -> asyncio.Task[Any]:
+def fire_and_forget(coro: Coroutine[Any, Any, T], *, name: str | None = None) -> asyncio.Task[T]:
     """Create a background task with proper lifecycle management."""
     task = asyncio.create_task(coro, name=name)
     background_tasks.add(task)

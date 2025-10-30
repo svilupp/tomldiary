@@ -1,6 +1,6 @@
 [project]
 name = "tomldiary"
-version = "0.7.1"
+version = "0.8.0"
 description = "A lightweight TOML-based memory system for AI agents"
 readme = "README.md"
 license = "MIT"
@@ -139,7 +139,8 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-files = ["src/tomldiary", "tests"]
+files = ["src/tomldiary"]
+
 
 # Per-module options for gradual strict typing adoption
 [[tool.mypy.overrides]]

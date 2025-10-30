@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import tomllib
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, cast
 
 import tomli_w
 from pydantic import BaseModel
 from pydantic_ai import Agent, format_as_xml
 from pydantic_ai.models import Model
 
+from .backends import BackendProtocol
 from .compaction import (
     CompactionConfig,
     CompactionDeps,
@@ -16,42 +17,15 @@ from .compaction import (
     compactor_agent,
 )
 from .extractor_factory import extractor_agent
-from .models import _MODEL_VERSION, ConversationItem, MemoryDeps
+from .models import (
+    _MODEL_VERSION,
+    ConversationItem,
+    ConversationsStore,
+    MemoryDeps,
+    PreferencesStore,
+)
 from .pretty_print import ConversationsPrinter, PreferencesPrinter
 from .utils import extract_categories_from_schema
-
-
-# Backend protocol for type checking
-class BackendProtocol(Protocol):
-    """Protocol defining the complete backend interface.
-
-    All backend implementations (LocalBackend, FirestoreBackend) must implement
-    these methods for full compatibility.
-    """
-
-    async def load(self, user_id: str, kind: str) -> str | None:
-        """Load TOML content for a user and kind."""
-        ...
-
-    async def save(self, user_id: str, kind: str, content: str) -> None:
-        """Save TOML content for a user and kind."""
-        ...
-
-    async def exists(self, user_id: str, kind: str) -> bool:
-        """Check if a document exists for a user."""
-        ...
-
-    async def delete(self, user_id: str, kind: str) -> None:
-        """Delete a specific document for a user."""
-        ...
-
-    async def delete_user(self, user_id: str) -> None:
-        """Delete all data for a user."""
-        ...
-
-    async def list_users(self) -> list[str]:
-        """List all user IDs with stored data."""
-        ...
 
 
 class Diary:
@@ -90,49 +64,59 @@ class Diary:
     async def _save(self, user_id: str, kind: str, content: str) -> None:
         return await self.backend.save(user_id, kind, content)
 
-    async def _load_prefs(self, user_id: str) -> dict[str, Any]:
+    async def _load_prefs(self, user_id: str) -> PreferencesStore:
         prefs_blob = await self._load(user_id, "preferences")
         if prefs_blob:
-            prefs = tomllib.loads(prefs_blob)
+            prefs = cast(PreferencesStore, tomllib.loads(prefs_blob))
         else:
-            prefs = {
-                "_meta": {"version": _MODEL_VERSION, "schema_name": self.schema_name},
-                "preferences": {},
-            }
+            prefs = cast(
+                PreferencesStore,
+                {
+                    "_meta": {"version": _MODEL_VERSION, "schema_name": self.schema_name},
+                    "preferences": {},
+                },
+            )
         return prefs
 
-    async def _load_convs(self, user_id: str) -> dict[str, Any]:
+    async def _load_convs(self, user_id: str) -> ConversationsStore:
         convs_blob = await self._load(user_id, "conversations")
         if convs_blob:
-            convs = tomllib.loads(convs_blob)
+            convs_raw = tomllib.loads(convs_blob)
             # Check if migration is needed (v0.2 to v0.3)
-            if convs.get("_meta", {}).get("version") == "0.2":
+            if convs_raw.get("_meta", {}).get("version") == "0.2":
                 # Migrate old format to new format
-                migrated = {
+                migrated: dict[str, Any] = {
                     "_meta": {
                         "version": _MODEL_VERSION,
-                        "schema_name": convs["_meta"]["schema_name"],
+                        "schema_name": convs_raw["_meta"]["schema_name"],
                     },
                     "conversations": {},
                 }
                 # Move all non-_meta entries to conversations
-                for key, value in convs.items():
+                for key, value in convs_raw.items():
                     if key != "_meta":
                         migrated["conversations"][key] = value
-                convs = migrated
+                convs = cast(ConversationsStore, migrated)
                 # Save the migrated version
                 await self._save_convs(user_id, convs)
+            else:
+                convs = cast(ConversationsStore, convs_raw)
+            convs.setdefault("_meta", {"version": _MODEL_VERSION, "schema_name": self.schema_name})
+            convs.setdefault("conversations", {})
         else:
-            convs = {
-                "_meta": {"version": _MODEL_VERSION, "schema_name": self.schema_name},
-                "conversations": {},
-            }
+            convs = cast(
+                ConversationsStore,
+                {
+                    "_meta": {"version": _MODEL_VERSION, "schema_name": self.schema_name},
+                    "conversations": {},
+                },
+            )
         return convs
 
-    async def _save_prefs(self, user_id: str, prefs: dict[str, Any]) -> None:
+    async def _save_prefs(self, user_id: str, prefs: PreferencesStore) -> None:
         await self._save(user_id, "preferences", tomli_w.dumps(prefs))
 
-    async def _save_convs(self, user_id: str, convs: dict[str, Any]) -> None:
+    async def _save_convs(self, user_id: str, convs: ConversationsStore) -> None:
         await self._save(user_id, "conversations", tomli_w.dumps(convs))
 
     async def build_deps(self, user_id: str, session_id: str) -> MemoryDeps:
@@ -149,23 +133,24 @@ class Diary:
     async def ensure_session(self, user_id: str, session_id: str) -> bool:
         """Create session if needed, return whether it's new"""
         convs = await self._load_convs(user_id)
-        if session_id not in convs["conversations"]:
+        conversations: dict[str, Any] = convs["conversations"]
+        if session_id not in conversations:
             # Check if we've hit the conversation limit
-            conv_entries = convs["conversations"]
+            conv_entries: dict[str, Any] = conversations
             if len(conv_entries) >= self.max_conversations:
                 # Find the oldest conversation
                 oldest_id = min(
                     conv_entries.keys(), key=lambda k: conv_entries[k].get("_created", "")
                 )
-                del convs["conversations"][oldest_id]
+                del conversations[oldest_id]
 
-            convs["conversations"][session_id] = ConversationItem().model_dump(by_alias=True)
+            conversations[session_id] = ConversationItem().model_dump(by_alias=True)
             await self._save_convs(user_id, convs)
             return True
         return False
 
     # ------------ preference management ------------
-    async def _enforce_preference_limits(self, prefs: dict[str, Any]) -> None:
+    async def _enforce_preference_limits(self, prefs: PreferencesStore) -> None:
         """Enforce max preferences per category by removing low-count items"""
         preferences = prefs.get("preferences", {})
         for category, items in preferences.items():
@@ -176,7 +161,7 @@ class Diary:
                 )
                 preferences[category] = dict(sorted_items[: self.max_prefs_per_category])
 
-    def _preference_compaction_stats(self, prefs: dict[str, Any]) -> CompactionStats:
+    def _preference_compaction_stats(self, prefs: PreferencesStore) -> CompactionStats:
         preferences = prefs.get("preferences", {})
         total_chars = len(tomli_w.dumps({"preferences": preferences}))
         largest_block = 0
@@ -185,8 +170,11 @@ class Diary:
                 largest_block = max(largest_block, len(data.get("text", "")))
         return CompactionStats(total_chars=total_chars, largest_block=largest_block)
 
-    def _conversation_compaction_stats(self, convs: dict[str, Any]) -> CompactionStats:
+    def _conversation_compaction_stats(self, convs: ConversationsStore) -> CompactionStats:
         conversations = convs.get("conversations", {})
+        if not conversations:
+            return CompactionStats(total_chars=0, largest_block=0)
+
         total_chars = len(tomli_w.dumps({"conversations": conversations}))
         largest_block = 0
         for data in conversations.values():
@@ -206,7 +194,9 @@ class Diary:
         now = datetime.now(UTC)
 
         prefs_meta = deps.prefs.setdefault("_meta", {})
-        convs_meta = deps.convs.setdefault("_meta", {})
+        convs_meta = deps.convs.setdefault(
+            "_meta", {"version": _MODEL_VERSION, "schema_name": self.schema_name}
+        )
         pref_comp_meta = prefs_meta.setdefault("compaction", {})
         conv_comp_meta = convs_meta.setdefault("compaction", {})
 
@@ -372,9 +362,9 @@ class Diary:
         self, user_id: str, limit: int = 3, skip_metadata: bool = False
     ) -> dict[str, Any]:
         convs = await self._load_convs(user_id)
-        # Get conversations from nested structure
         conv_entries = convs.get("conversations", {})
-        result = dict(
+
+        result: dict[str, Any] = dict(
             sorted(conv_entries.items(), key=lambda kv: kv[1]["_created"], reverse=True)[:limit]
         )
 

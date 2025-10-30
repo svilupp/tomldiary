@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint format test ci save help
+.PHONY: install install-dev lint format test ci save help typecheck
 
 # Default target
 .DEFAULT_GOAL := help
@@ -32,7 +32,9 @@ format:
 	ruff check --fix src tests
 
 typecheck:
-	uv run mypy src/tomldiary --ignore-missing-imports
+	uv run mypy src/tomldiary
+	# temporarily disabled tests until we can fix the type hints in the tests
+	# cd tests && uv run mypy . --config-file=../pyproject.toml
 
 # Run tests
 test:

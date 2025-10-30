@@ -95,7 +95,7 @@ class LocalBackend:
     async def list_users(self) -> list[str]:
         """List all user IDs with stored data."""
 
-        def _list_user_dirs():
+        def _list_user_dirs() -> list[str]:
             """Synchronous helper to list user directories."""
             if not self.base_path.exists():
                 return []

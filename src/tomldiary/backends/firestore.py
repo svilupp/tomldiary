@@ -33,6 +33,7 @@ The base_path must have an EVEN number of segments to ensure valid paths.
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Any
 
 try:
     from google.api_core import exceptions as gcp_exceptions
@@ -81,7 +82,7 @@ class FirestoreBackend:
         project_id: str,
         base_path: str = "users",
         credentials_path: str | None = None,
-        credentials_dict: dict | None = None,
+        credentials_dict: dict[str, Any] | None = None,
         database: str = "(default)",
     ):
         """
@@ -155,7 +156,7 @@ class FirestoreBackend:
                 f"project={project_id}, database={database}, base_path={self.base_path}"
             )
 
-    def _get_document_ref(self, user_id: str, kind: str):
+    def _get_document_ref(self, user_id: str, kind: str) -> Any:
         """
         Get Firestore document reference following the hierarchy:
         {base_path}/{user_id}/{kind}.toml

@@ -4,10 +4,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic_ai import Agent, Tool
 from textprompts import Prompt
+
+from .models import (
+    ConversationItemDict,
+    ConversationsStore,
+    PreferenceItemDict,
+    PreferencesStore,
+)
 
 
 @dataclass
@@ -32,8 +39,13 @@ class CompactionConfig:
     compact_conversations: bool = True
 
     def __post_init__(self) -> None:
-        if isinstance(self.schedule_at, str):
-            self.schedule_at = datetime.fromisoformat(self.schedule_at)  # type: ignore[unreachable]
+        schedule_at = cast(object, self.schedule_at)
+        if isinstance(schedule_at, str):
+            self.schedule_at = datetime.fromisoformat(schedule_at)
+        elif schedule_at is None:
+            self.schedule_at = None
+        else:
+            self.schedule_at = cast(datetime, schedule_at)
 
     def should_run(
         self,
@@ -94,26 +106,29 @@ class CompactionConfig:
 class CompactionDeps:
     """Dependencies passed into the compaction agent."""
 
-    prefs: dict
-    convs: dict
+    prefs: PreferencesStore
+    convs: ConversationsStore
     include_preferences: bool
     include_conversations: bool
     actor_label: str = "compactor"
 
-    def preference_blocks(self) -> list[tuple[str, dict]]:
+    def preference_blocks(self) -> list[tuple[str, PreferenceItemDict]]:
         if not self.include_preferences:
             return []
-        blocks: list[tuple[str, dict]] = []
+        blocks: list[tuple[str, PreferenceItemDict]] = []
         for cat, items in self.prefs.get("preferences", {}).items():
             for pref_id, data in items.items():
                 blocks.append((f"{cat}/{pref_id}", data))
         return blocks
 
-    def conversation_blocks(self) -> list[tuple[str, dict]]:
+    def conversation_blocks(self) -> list[tuple[str, ConversationItemDict]]:
         if not self.include_conversations:
             return []
-        blocks: list[tuple[str, dict]] = []
-        for session_id, data in self.convs.get("conversations", {}).items():
+        conversations = self.convs.get("conversations")
+        if conversations is None:
+            return []
+        blocks: list[tuple[str, ConversationItemDict]] = []
+        for session_id, data in conversations.items():
             blocks.append((session_id, data))
         return blocks
 
@@ -125,14 +140,11 @@ class CompactionDeps:
             raise ValueError("Preference block id must be in 'category/id' format") from exc
         return category, pref_id
 
-    def get_preference_block(self, block_id: str) -> dict[str, Any]:
+    def get_preference_block(self, block_id: str) -> PreferenceItemDict | dict[str, Any]:
         if not self.include_preferences:
             raise ValueError("Preference compaction disabled for this run")
         category, pref_id = self._split_pref_block(block_id)
-        result: dict[str, Any] = (
-            self.prefs.get("preferences", {}).get(category, {}).get(pref_id, {})
-        )
-        return result
+        return self.prefs.get("preferences", {}).get(category, {}).get(pref_id, {})
 
     def rewrite_preference_block(
         self,
@@ -162,11 +174,11 @@ class CompactionDeps:
                 prefs_root.pop(category, None)
 
     # ───────── conversation helpers ─────────
-    def get_conversation_block(self, session_id: str) -> dict[str, Any]:
+    def get_conversation_block(self, session_id: str) -> ConversationItemDict | dict[str, Any]:
         if not self.include_conversations:
             raise ValueError("Conversation compaction disabled for this run")
-        result: dict[str, Any] = self.convs.get("conversations", {}).get(session_id, {})
-        return result
+        conversations = self.convs.get("conversations", {})
+        return conversations.get(session_id, {})
 
     def rewrite_conversation_block(
         self,
@@ -186,9 +198,11 @@ class CompactionDeps:
     def delete_conversation_block(self, session_id: str) -> None:
         if not self.include_conversations:
             raise ValueError("Conversation compaction disabled for this run")
-        convs_root = self.convs.get("conversations", {})
-        if session_id in convs_root:
-            del convs_root[session_id]
+        conversations = self.convs.get("conversations")
+        if conversations is None:
+            return
+        if session_id in conversations:
+            del conversations[session_id]
 
 
 def compactor_agent(

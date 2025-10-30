@@ -1,13 +1,17 @@
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
 
 from tomldiary import compaction_tools
 from tomldiary.compaction import CompactionConfig, CompactionDeps, CompactionStats
+from tomldiary.models import ConversationsStore, PreferencesStore
 
 
 class DummyCtx:
-    def __init__(self, deps):
+    """Mock RunContext for testing compaction tools."""
+
+    def __init__(self, deps: CompactionDeps) -> None:
         self.deps = deps
 
 
@@ -90,53 +94,66 @@ def test_compaction_config_trigger_conditions():
 @pytest.mark.asyncio
 async def test_compaction_tool_mutations():
     deps = CompactionDeps(
-        prefs={
-            "preferences": {
-                "likes": {
-                    "pizza": {
-                        "text": "likes pizza",
-                        "contexts": ["food"],
-                        "_count": 1,
-                        "_updated": "2024-01-01T00:00:00Z",
+        prefs=cast(
+            PreferencesStore,
+            {
+                "_meta": {},
+                "preferences": {
+                    "likes": {
+                        "pizza": {
+                            "text": "likes pizza",
+                            "contexts": ["food"],
+                            "_count": 1,
+                            "_created": "2024-01-01T00:00:00Z",
+                            "_updated": "2024-01-01T00:00:00Z",
+                            "_created_by": "test",
+                            "_updated_by": "test",
+                        }
                     }
-                }
-            }
-        },
-        convs={
-            "conversations": {
-                "chat-1": {
-                    "summary": "long running discussion",
-                    "keywords": ["pizza"],
-                    "_updated": "2024-01-01T00:00:00Z",
-                }
-            }
-        },
+                },
+            },
+        ),
+        convs=cast(
+            ConversationsStore,
+            {
+                "_meta": {},
+                "conversations": {
+                    "chat-1": {
+                        "_created": "2024-01-01T00:00:00Z",
+                        "_updated": "2024-01-01T00:00:00Z",
+                        "_turns": 1,
+                        "summary": "long running discussion",
+                        "keywords": ["pizza"],
+                    }
+                },
+            },
+        ),
         include_preferences=True,
         include_conversations=True,
     )
 
     ctx = DummyCtx(deps)
 
-    listing = await compaction_tools.list_preference_blocks(ctx)
+    listing = await compaction_tools.list_preference_blocks(ctx)  # type: ignore[arg-type]
     assert "likes/pizza" in listing
 
-    await compaction_tools.rewrite_preference_block(
+    await compaction_tools.rewrite_preference_block(  # type: ignore[arg-type]
         ctx, "likes/pizza", text="still likes pizza", contexts=["food court"]
     )
     assert deps.prefs["preferences"]["likes"]["pizza"]["text"] == "still likes pizza"
     assert deps.prefs["preferences"]["likes"]["pizza"]["contexts"] == ["food court"]
 
-    await compaction_tools.delete_preference_block(ctx, "likes/pizza")
+    await compaction_tools.delete_preference_block(ctx, "likes/pizza")  # type: ignore[arg-type]
     assert "pizza" not in deps.prefs.get("preferences", {}).get("likes", {})
 
-    convo_listing = await compaction_tools.list_conversation_blocks(ctx)
+    convo_listing = await compaction_tools.list_conversation_blocks(ctx)  # type: ignore[arg-type]
     assert "chat-1" in convo_listing
 
-    await compaction_tools.rewrite_conversation_block(
+    await compaction_tools.rewrite_conversation_block(  # type: ignore[arg-type]
         ctx, "chat-1", summary="short summary", keywords=["concise"]
     )
     assert deps.convs["conversations"]["chat-1"]["summary"] == "short summary"
     assert deps.convs["conversations"]["chat-1"]["keywords"] == ["concise"]
 
-    await compaction_tools.delete_conversation_block(ctx, "chat-1")
+    await compaction_tools.delete_conversation_block(ctx, "chat-1")  # type: ignore[arg-type]
     assert "chat-1" not in deps.convs.get("conversations", {})

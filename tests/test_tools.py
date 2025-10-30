@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.tomldiary.models import MemoryDeps
-from src.tomldiary.tools import (
+from tomldiary.models import MemoryDeps
+from tomldiary.tools import (
     _check_preference_limits,
     _find_similar_preferences,
     forget_preference,
