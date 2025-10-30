@@ -33,7 +33,7 @@ class CompactionConfig:
 
     def __post_init__(self) -> None:
         if isinstance(self.schedule_at, str):
-            self.schedule_at = datetime.fromisoformat(self.schedule_at)
+            self.schedule_at = datetime.fromisoformat(self.schedule_at)  # type: ignore[unreachable]
 
     def should_run(
         self,
