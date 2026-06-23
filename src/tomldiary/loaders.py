@@ -132,8 +132,11 @@ class PreferenceLoader:
                 f"Valid categories: {valid_categories}"
             )
 
-        # Validate each item as PreferenceItem
-        adapter = TypeAdapter(dict[str, PreferenceItem])
+        # Validate each item using the category's actual declared field type,
+        # so partial validation stays consistent with full validation.
+        adapter: TypeAdapter[dict[str, PreferenceItem]] = TypeAdapter(
+            self.pref_table_cls.model_fields[category].annotation
+        )
         return adapter.validate_python(data)
 
 

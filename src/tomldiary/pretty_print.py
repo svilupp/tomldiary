@@ -17,13 +17,17 @@ class BasePrettyPrinter:
         """Generate indentation string."""
         return self._indent_char * (self.indent_size * level)
 
-    def _format_datetime(self, iso_string: str) -> str:
-        """Format ISO datetime string to human-friendly format."""
+    def _format_datetime(self, iso_string: str | datetime) -> str:
+        """Format an ISO datetime string (or datetime) to human-friendly format."""
         try:
-            dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+            # Bare TOML datetimes are parsed into datetime objects by tomllib.
+            if isinstance(iso_string, datetime):
+                dt = iso_string
+            else:
+                dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
             return dt.strftime("%b %d, %Y %I:%M %p")
-        except (ValueError, AttributeError):
-            return iso_string
+        except (ValueError, AttributeError, TypeError):
+            return str(iso_string)
 
 
 class PreferencesPrinter(BasePrettyPrinter):

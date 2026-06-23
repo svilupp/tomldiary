@@ -65,29 +65,115 @@ def test_compaction_config_trigger_conditions():
         now=now,
     )
 
-    # Schedule trigger fires only once
-    target_time = now + timedelta(seconds=5)
+    # Schedule trigger is recurring-daily: at most once per calendar day, after the
+    # configured time-of-day, when no run has happened yet today.
+    # (Previously this asserted strict one-shot behavior, which was the bug.)
+    base = datetime(2026, 6, 23, 0, 0, 0, tzinfo=UTC)
+    target_time = base + timedelta(hours=8)  # 08:00 UTC time-of-day
     cfg = CompactionConfig(enabled=True, schedule_at=target_time)
+    # Before today's target time-of-day: does not fire.
     assert not cfg.should_run(
         store="preferences",
         stats=stats,
         last_run=None,
         turns_since_compaction=None,
-        now=now,
+        now=base + timedelta(hours=7),
     )
+    # At/after today's target with no prior run: fires.
     assert cfg.should_run(
         store="preferences",
         stats=stats,
         last_run=None,
         turns_since_compaction=None,
-        now=target_time + timedelta(seconds=1),
+        now=base + timedelta(hours=9),
     )
+    # Already ran today after the target: does not fire again the same day.
     assert not cfg.should_run(
         store="preferences",
         stats=stats,
-        last_run=target_time + timedelta(seconds=1),
+        last_run=base + timedelta(hours=9),
         turns_since_compaction=None,
-        now=target_time + timedelta(seconds=2),
+        now=base + timedelta(hours=10),
+    )
+
+
+def test_naive_schedule_at_does_not_crash_should_run():
+    """Bug A: a naive ISO ``schedule_at`` must not crash when compared to aware ``now``."""
+    cfg = CompactionConfig(enabled=True, schedule_at="2026-06-23T08:00:00")
+    # schedule_at is coerced to aware UTC, so comparison against an aware now is safe.
+    assert cfg.schedule_at is not None
+    assert cfg.schedule_at.tzinfo is not None
+    now = datetime(2026, 6, 23, 9, 0, 0, tzinfo=UTC)
+    # Must not raise TypeError("can't compare offset-naive and offset-aware datetimes").
+    result = cfg.should_run(
+        store="preferences",
+        stats=CompactionStats(),
+        last_run=None,
+        turns_since_compaction=None,
+        now=now,
+    )
+    assert result is True
+
+
+def test_zero_char_threshold_does_not_trigger():
+    """Bug B: a threshold of 0 means "disabled", not "always trigger"."""
+    now = datetime.now(UTC)
+    cfg = CompactionConfig(
+        enabled=True,
+        total_char_threshold=0,
+        segment_char_threshold=0,
+    )
+    # Empty stats + zero thresholds: nothing should fire.
+    assert not cfg.should_run(
+        store="preferences",
+        stats=CompactionStats(total_chars=0, largest_block=0),
+        last_run=None,
+        turns_since_compaction=None,
+        now=now,
+    )
+    # Even with content present, a 0 threshold stays disabled.
+    assert not cfg.should_run(
+        store="preferences",
+        stats=CompactionStats(total_chars=10_000, largest_block=10_000),
+        last_run=None,
+        turns_since_compaction=None,
+        now=now,
+    )
+    # And a zero user_turn_interval is likewise disabled.
+    cfg_turns = CompactionConfig(enabled=True, user_turn_interval=0, compact_preferences=False)
+    assert not cfg_turns.should_run(
+        store="conversations",
+        stats=CompactionStats(),
+        last_run=None,
+        turns_since_compaction=1_000,
+        now=now,
+    )
+
+
+def test_schedule_trigger_fires_on_two_different_days():
+    """Bug C: the daily schedule recurs - it fires again on a later day."""
+    base = datetime(2026, 6, 23, 0, 0, 0, tzinfo=UTC)
+    cfg = CompactionConfig(enabled=True, schedule_at=base + timedelta(hours=8))  # 08:00 UTC
+    stats = CompactionStats()
+
+    # Day 1: fires after the scheduled time, no prior run.
+    day1_fire = base + timedelta(hours=9)
+    assert cfg.should_run(
+        store="preferences",
+        stats=stats,
+        last_run=None,
+        turns_since_compaction=None,
+        now=day1_fire,
+    )
+
+    # Day 2: after the scheduled time-of-day again, last run was yesterday -> fires again.
+    day2_now = base + timedelta(days=1, hours=9)
+    assert cfg.should_run(
+        store="preferences",
+        stats=stats,
+        last_run=day1_fire,
+        turns_since_compaction=None,
+        now=day2_now,
     )
 
 

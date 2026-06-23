@@ -24,6 +24,14 @@ from .models import MemoryDeps
 REQUIRED_PLACEHOLDERS = {"categories_doc", "current_time"}
 
 
+def _round_current_time(now: datetime) -> str:
+    """Round a timestamp down to the nearest 15 minutes (to not break prompt caching)."""
+
+    minutes = (now.minute // 15) * 15
+    rounded = now.replace(minute=minutes, second=0, microsecond=0)
+    return rounded.strftime("%Y-%m-%d %H:%M")
+
+
 def _warn_missing_placeholders(prompt_text: str, required: Sequence[str]) -> None:
     """Check placeholders in the prompt and warn if required ones are missing."""
 
@@ -97,14 +105,6 @@ def extractor_agent(
 
     extractor_prompt_check(prompt_obj)
 
-    # Get current time rounded to nearest 15 minutes (to not break prompt caching)
-    now = datetime.now()
-    minutes = (now.minute // 15) * 15
-    rounded_time = now.replace(minute=minutes, second=0, microsecond=0)
-    current_time = rounded_time.strftime("%Y-%m-%d %H:%M")
-
-    system_prompt = prompt_obj.prompt.format(categories_doc=docs, current_time=current_time)
-
     # 2. assemble tools with updated names
     tool_list: list[Tool[MemoryDeps]] = [
         Tool(tools.list_categories, takes_ctx=True),
@@ -143,10 +143,18 @@ def extractor_agent(
         fallback_model,
         deps_type=MemoryDeps,
         tools=tool_list,
-        system_prompt=system_prompt,
     )
 
-    # 4. TOML round-trip validator
+    # 4. dynamic system prompt: compute the timestamp fresh per run so a factory built
+    # once at app startup does not bake in a stale timestamp. The `current_time` is taken
+    # from deps.context_now (testing/dev override) when set, else the real current time.
+    @agent.system_prompt
+    def _build_system_prompt(ctx: RunContext[MemoryDeps]) -> str:
+        now = ctx.deps.context_now or datetime.now()
+        current_time = _round_current_time(now)
+        return prompt_obj.prompt.format(categories_doc=docs, current_time=current_time)
+
+    # 5. TOML round-trip validator
     @agent.output_validator
     async def toml_roundtrip(
         ctx: RunContext[MemoryDeps], output: str

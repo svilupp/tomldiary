@@ -4,6 +4,7 @@ import asyncio
 import os
 import threading
 from collections.abc import Coroutine
+from datetime import datetime
 from typing import Any, TypeVar
 
 from .diary import Diary
@@ -26,12 +27,19 @@ def fire_and_forget(coro: Coroutine[Any, Any, T], *, name: str | None = None) ->
     """Create a background task with proper lifecycle management."""
     task = asyncio.create_task(coro, name=name)
     background_tasks.add(task)
-    task.add_done_callback(background_tasks.discard)
-    task.add_done_callback(
-        lambda t: log.exception("%s crashed", t.get_name(), exc_info=t.exception())
-        if t.exception()
-        else None
-    )
+
+    def _on_done(t: asyncio.Task[Any]) -> None:
+        # Always drop the strong reference so the task can be collected.
+        background_tasks.discard(t)
+        # Cancelled tasks are expected (e.g. during shutdown); Task.exception()
+        # would itself raise CancelledError, so guard for it first.
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            log.exception("%s crashed", t.get_name(), exc_info=exc)
+
+    task.add_done_callback(_on_done)
     return task
 
 
@@ -40,7 +48,10 @@ class MemoryWriter:
 
     def __init__(self, diary: Diary, *, workers: int = WORKERS, qsize: int = QUEUE_MAXSIZE) -> None:
         self.diary = diary
-        self.q: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue(maxsize=qsize)
+        # Queue item: (user_id, session_id, user_msg, assistant_msg, context_now)
+        self.q: asyncio.Queue[tuple[str, str, str, str, datetime | None]] = asyncio.Queue(
+            maxsize=qsize
+        )
 
         # Synchronization lock for counters/state. Use threading.Lock so synchronous stats()
         # can take a consistent snapshot without awaiting.
@@ -59,16 +70,27 @@ class MemoryWriter:
         self._active_workers = 0
 
     async def submit(
-        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+        self,
+        user_id: str,
+        session_id: str,
+        user_msg: str,
+        assistant_msg: str,
+        *,
+        context_now: datetime | None = None,
     ) -> None:
         """Submit a memory update request to the queue (may block on backpressure)."""
         with self._state_lock:
             if not self._accepting:
                 raise RuntimeError("MemoryWriter is closed")
-            self._submitted_count += 1
 
-        # Queue operations are thread-safe, can be done outside lock
-        await self.q.put((user_id, session_id, user_msg, assistant_msg))
+        # Queue operations are thread-safe, can be done outside lock. Count the
+        # submission only once the item is actually enqueued: if put() is cancelled
+        # while blocked on a full queue the item never enters the queue, so counting
+        # it earlier would leave a phantom submission and break the
+        # submitted == completed + failed + pending invariant permanently.
+        await self.q.put((user_id, session_id, user_msg, assistant_msg, context_now))
+        with self._state_lock:
+            self._submitted_count += 1
 
     async def _worker(self, worker_id: int) -> None:
         """Worker task that processes memory updates from the queue."""
@@ -82,9 +104,13 @@ class MemoryWriter:
 
                 try:
                     # Wait for work with a timeout to allow graceful shutdown
-                    user_id, session_id, user_msg, assistant_msg = await asyncio.wait_for(
-                        self.q.get(), timeout=1.0
-                    )
+                    (
+                        user_id,
+                        session_id,
+                        user_msg,
+                        assistant_msg,
+                        context_now,
+                    ) = await asyncio.wait_for(self.q.get(), timeout=1.0)
                 except TimeoutError:
                     continue
 
@@ -93,11 +119,22 @@ class MemoryWriter:
                     self._active_workers += 1
 
                 try:
-                    await self._process(user_id, session_id, user_msg, assistant_msg)
+                    await self._process(
+                        user_id, session_id, user_msg, assistant_msg, context_now=context_now
+                    )
 
                     # Increment completed counter (thread-safe)
                     with self._state_lock:
                         self._completed_count += 1
+                except asyncio.CancelledError:
+                    # Cancellation (e.g. forced shutdown) is a BaseException and would
+                    # otherwise skip the Exception handler, leaving the in-flight item
+                    # unaccounted and pending stuck > 0. Treat the abandoned item as
+                    # failed so submitted == completed + failed holds, then re-raise to
+                    # honour the cancellation.
+                    with self._state_lock:
+                        self._failed_count += 1
+                    raise
                 except Exception as e:
                     # Increment failed counter (thread-safe)
                     with self._state_lock:
@@ -114,10 +151,18 @@ class MemoryWriter:
             log.exception(f"Memory worker {worker_id} crashed: {e}")
 
     async def _process(
-        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+        self,
+        user_id: str,
+        session_id: str,
+        user_msg: str,
+        assistant_msg: str,
+        *,
+        context_now: datetime | None = None,
     ) -> None:
         """Process a single memory update."""
-        await self.diary.update_memory(user_id, session_id, user_msg, assistant_msg)
+        await self.diary.update_memory(
+            user_id, session_id, user_msg, assistant_msg, context_now=context_now
+        )
 
     def stats(self) -> dict[str, int | float | bool]:
         """
@@ -182,7 +227,15 @@ class MemoryWriter:
         return self._accepting
 
     async def close(self) -> None:
-        """Gracefully shutdown the writer and all workers."""
+        """Gracefully shutdown the writer and all workers.
+
+        Shutdown is bounded by SHUTDOWN_TIMEOUT: workers are given that long to
+        drain the queue and finish in-flight work. If they do not finish in time
+        (e.g. a slow or hung ``_process``), the remaining work is abandoned --
+        the worker tasks are cancelled and any in-flight item is accounted as
+        failed. The happy path, where the queue drains before the timeout,
+        always lets workers finish naturally and is unaffected.
+        """
         log.info("Shutting down MemoryWriter...")
 
         with self._state_lock:
@@ -193,23 +246,72 @@ class MemoryWriter:
 
         # Wait for queue to drain with timeout to prevent deadlock
         # (keep workers processing while accepting is disabled)
+        timed_out = False
         try:
             await asyncio.wait_for(self.q.join(), timeout=SHUTDOWN_TIMEOUT)
             log.debug("Queue drained successfully")
         except TimeoutError:
+            timed_out = True
             remaining = self.q.qsize()
             log.warning(
                 f"Queue did not drain within {SHUTDOWN_TIMEOUT}s timeout, "
-                f"{remaining} items remaining. Proceeding with worker shutdown."
+                f"{remaining} items remaining. Cancelling workers."
             )
 
         # Signal workers to stop after queue is drained (or after timeout)
         with self._state_lock:
             self._shutdown = True
 
-        # Wait for workers to finish
-        await asyncio.gather(*self.workers, return_exceptions=True)
+        if not timed_out:
+            # Happy path: queue drained, so just let workers finish their current
+            # loop iteration. They observe _shutdown + empty queue and exit cleanly.
+            await self._stop_workers(grace=SHUTDOWN_TIMEOUT)
+        else:
+            # Drain did not finish in time: abandon remaining work and force the
+            # bound by cancelling workers so close() cannot block on queued or hung
+            # processing. Cancellation is requested with no grace period.
+            await self._stop_workers(grace=0)
+
         log.info("MemoryWriter shutdown complete")
+
+    async def _stop_workers(self, *, grace: float) -> None:
+        """Join workers, cancelling them if they do not exit within ``grace`` seconds.
+
+        ``cancel()`` alone is not always sufficient: a worker dequeuing from a
+        non-empty queue can repeatedly resolve ``asyncio.wait_for(q.get())``
+        synchronously, and ``wait_for`` may swallow a pending cancellation in that
+        window. To guarantee a bound, we (re)issue cancellation and wait again, and
+        ultimately abandon the tasks rather than block forever -- they remain
+        tracked in ``background_tasks`` and are cancelled on interpreter shutdown.
+        """
+        # First, give workers a bounded chance to finish gracefully.
+        if grace > 0:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self.workers, return_exceptions=True), timeout=grace
+                )
+                return
+            except TimeoutError:
+                log.warning("Workers did not exit within %ss, cancelling.", grace)
+
+        # Force cancellation. The first cancel can be swallowed by a
+        # wait_for(q.get()) that resolves synchronously; re-issue it on a short
+        # poll so it is re-delivered once the worker is genuinely suspended, but
+        # never block unboundedly.
+        deadline = asyncio.get_event_loop().time() + 5.0
+        while asyncio.get_event_loop().time() < deadline:
+            for w in self.workers:
+                if not w.done():
+                    w.cancel()
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self.workers, return_exceptions=True), timeout=0.05
+                )
+                return
+            except TimeoutError:
+                continue
+
+        log.warning("Workers did not stop after cancellation; abandoning them.")
 
 
 async def shutdown_all_background_tasks(timeout: int = SHUTDOWN_TIMEOUT) -> None:

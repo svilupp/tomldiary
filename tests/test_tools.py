@@ -26,7 +26,7 @@ class MockContext:
         self.deps = deps
 
 
-def create_mock_deps(prefs_data=None, max_prefs=10):
+def create_mock_deps(prefs_data=None, max_prefs=10, context_now=None):
     """Create mock MemoryDeps for testing"""
     if prefs_data is None:
         prefs_data = {"_meta": {"version": "0.3", "schema_name": "TestTable"}, "preferences": {}}
@@ -51,6 +51,7 @@ def create_mock_deps(prefs_data=None, max_prefs=10):
         schema_name="TestTable",
         session_id="session1",
         max_prefs_per_category=max_prefs,
+        context_now=context_now,
     )
 
 
@@ -401,6 +402,101 @@ class TestUpsertPreference:
         assert "❌" in result
         assert "is not allowed" in result
 
+    async def test_unknown_concrete_id_at_limit_is_rejected(self):
+        """Bug 1 regression: an unknown concrete id + text at a full category
+        must NOT silently create a new preference that later gets evicted.
+
+        Previously the limit/dedup guards only ran for id None/"new", so an
+        LLM-hallucinated concrete id (e.g. 'black_blazers') reached the create
+        path with no limit check and returned '✅ Created'. It must now be
+        rejected with the existing limit message instead.
+        """
+        prefs_data = {
+            "_meta": {"version": "0.3", "schema_name": "TestTable"},
+            "preferences": {
+                "likes": {
+                    "pref001": {"text": "item1", "_count": 5},
+                    "pref002": {"text": "item2", "_count": 5},
+                }
+            },
+        }
+
+        deps = create_mock_deps(prefs_data, max_prefs=2)  # Already at limit
+        ctx = MockContext(deps)
+
+        result = await upsert_preference(ctx, "likes", id="black_blazers", text="black blazers")
+
+        assert "❌" in result
+        assert "at limit" in result
+        assert "(2/2)" in result
+        # No new preference should have been created.
+        assert "black_blazers" not in ctx.deps.prefs["preferences"]["likes"]
+        assert len(ctx.deps.prefs["preferences"]["likes"]) == 2
+
+    async def test_unknown_concrete_id_triggers_dedup(self):
+        """Bug 1 regression: an unknown concrete id + text similar to an
+        existing preference must be blocked by dedup (not silently created),
+        unless the caller forces with id='new'.
+        """
+        prefs_data = {
+            "_meta": {"version": "0.3", "schema_name": "TestTable"},
+            "preferences": {"likes": {"pref001": {"text": "loves black blazers", "_count": 1}}},
+        }
+
+        deps = create_mock_deps(prefs_data)
+        ctx = MockContext(deps)
+
+        result = await upsert_preference(ctx, "likes", id="black_blazers", text="black blazers")
+
+        assert "❌ Similar preferences found" in result
+        assert "loves black blazers" in result
+        # No new preference should have been created.
+        assert "black_blazers" not in ctx.deps.prefs["preferences"]["likes"]
+        assert len(ctx.deps.prefs["preferences"]["likes"]) == 1
+
+    async def test_unknown_concrete_id_creates_when_below_limit(self):
+        """Bug 1: a unique unknown concrete id below the limit still creates,
+        preserving the caller-supplied id.
+        """
+        deps = create_mock_deps(max_prefs=10)
+        ctx = MockContext(deps)
+
+        result = await upsert_preference(ctx, "likes", id="custom_id", text="burgundy scarves")
+
+        assert "✅ Created" in result
+        assert "likes/custom_id" in result
+        assert ctx.deps.prefs["preferences"]["likes"]["custom_id"]["text"] == "burgundy scarves"
+        assert ctx.deps.prefs["preferences"]["likes"]["custom_id"]["_count"] == 1
+
+    async def test_boost_item_without_count_does_not_crash(self):
+        """Bug 2 regression: boosting an item that lacks '_count' (e.g. a block
+        produced by the compactor's rewrite_preference_block) must not raise
+        KeyError; it should initialize the count and increment from 0.
+        """
+        prefs_data = {
+            "_meta": {"version": "0.3", "schema_name": "TestTable"},
+            "preferences": {
+                "likes": {
+                    "pref001": {
+                        "text": "black blazers",
+                        "contexts": [],
+                        "_created": "2024-01-01T00:00:00Z",
+                        "_updated": "2024-01-01T00:00:00Z",
+                        # NOTE: no "_count" key on purpose
+                    }
+                }
+            },
+        }
+
+        deps = create_mock_deps(prefs_data)
+        ctx = MockContext(deps)
+
+        result = await upsert_preference(ctx, "likes", id="pref001")
+
+        assert "✅ Boosted" in result
+        assert "(count: 1)" in result
+        assert ctx.deps.prefs["preferences"]["likes"]["pref001"]["_count"] == 1
+
 
 class TestListPreferences:
     """Test the enhanced list_preferences functionality"""
@@ -484,7 +580,31 @@ class TestOtherTools:
         result = await forget_preference(ctx, "likes", "pref001")
 
         assert "🗑️ Deleted likes/pref001" in result
-        assert "pref001" not in ctx.deps.prefs["preferences"]["likes"]
+        # Bug 3 fix: deleting the last preference removes the empty category too.
+        assert "likes" not in ctx.deps.prefs["preferences"]
+
+    async def test_forget_preference_removes_empty_category(self):
+        """Bug 3 regression: deleting the last preference in a category removes
+        the now-empty category dict, matching delete_preference_block.
+        """
+        prefs_data = {
+            "_meta": {"version": "0.3", "schema_name": "TestTable"},
+            "preferences": {
+                "likes": {"pref001": {"text": "black blazers", "_count": 1}},
+                "dislikes": {"pref001": {"text": "loud noises", "_count": 1}},
+            },
+        }
+
+        deps = create_mock_deps(prefs_data)
+        ctx = MockContext(deps)
+
+        result = await forget_preference(ctx, "likes", "pref001")
+
+        assert "🗑️ Deleted likes/pref001" in result
+        # The emptied category should be gone, not left as an empty dict.
+        assert "likes" not in ctx.deps.prefs["preferences"]
+        # Other categories remain untouched.
+        assert "dislikes" in ctx.deps.prefs["preferences"]
 
     async def test_forget_preference_not_found(self):
         """Test forgetting non-existent preference"""
@@ -506,6 +626,16 @@ class TestOtherTools:
         assert "✅ Updated conversation summary" in result
         assert ctx.deps.convs["conversations"]["session1"]["summary"] == "Updated summary"
         assert ctx.deps.convs["conversations"]["session1"]["keywords"] == ["keyword1", "keyword2"]
+
+    async def test_update_conversation_summary_stamps_updated(self):
+        """Bug 4 regression: update_conversation_summary stamps _updated."""
+        ctx_now = datetime(2030, 1, 2, 9, 7, tzinfo=UTC)
+        deps = create_mock_deps(context_now=ctx_now)
+        ctx = MockContext(deps)
+
+        await update_conversation_summary(ctx, "Updated summary")
+
+        assert ctx.deps.convs["conversations"]["session1"]["_updated"] == ctx_now.isoformat()
 
 
 class TestNewFunctionalityIntegration:
@@ -572,6 +702,46 @@ class TestNewFunctionalityIntegration:
 
         # Verify we have exactly 3 preferences (at limit)
         assert len(ctx.deps.prefs["preferences"]["likes"]) == 3
+
+
+class TestContextNowOverride:
+    """Stored timestamps follow deps.context_now when provided (past/future testing)."""
+
+    async def test_create_uses_context_now(self):
+        """A new preference stamps _created/_updated from context_now when set."""
+        ctx_now = datetime(2030, 1, 2, 9, 7, tzinfo=UTC)
+        deps = create_mock_deps(context_now=ctx_now)
+        ctx = MockContext(deps)
+
+        await upsert_preference(ctx, "likes", text="burgundy scarves")
+
+        pref = ctx.deps.prefs["preferences"]["likes"]["pref001"]
+        assert pref["_created"] == ctx_now.isoformat()
+        assert pref["_updated"] == ctx_now.isoformat()
+
+    async def test_boost_uses_context_now(self):
+        """Boosting an existing preference stamps _updated from context_now when set."""
+        ctx_now = datetime(2030, 1, 2, 9, 7, tzinfo=UTC)
+        prefs_data = {
+            "_meta": {"version": "0.3", "schema_name": "TestTable"},
+            "preferences": {
+                "likes": {
+                    "pref001": {
+                        "text": "black blazers",
+                        "_count": 1,
+                        "_created": "2024-01-01T00:00:00Z",
+                        "_updated": "2024-01-01T00:00:00Z",
+                    }
+                }
+            },
+        }
+        deps = create_mock_deps(prefs_data, context_now=ctx_now)
+        ctx = MockContext(deps)
+
+        await upsert_preference(ctx, "likes", id="pref001")
+
+        pref = ctx.deps.prefs["preferences"]["likes"]["pref001"]
+        assert pref["_updated"] == ctx_now.isoformat()
 
 
 if __name__ == "__main__":

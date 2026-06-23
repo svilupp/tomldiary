@@ -4,6 +4,7 @@ import asyncio
 import shutil
 import tempfile
 import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -91,10 +92,14 @@ class TestDiary:
 
     @pytest.fixture
     def compaction_config(self):
+        # Use a small positive char threshold so the preferences store compacts on real
+        # content (the test writes ~155 chars). Previously these were 0, which relied on
+        # the now-fixed "0 means always trigger" bug. The conversations store is still
+        # driven by user_turn_interval=1.
         return CompactionConfig(
             enabled=True,
-            total_char_threshold=0,
-            segment_char_threshold=0,
+            total_char_threshold=1,
+            segment_char_threshold=1,
             user_turn_interval=1,
         )
 
@@ -216,6 +221,45 @@ class TestDiary:
         convs = await diary.last_conversations(user_id, limit=1)
         assert session_id in convs
         assert convs[session_id]["_turns"] == 1
+
+    @pytest.mark.asyncio
+    async def test_update_memory_new_session_honors_context_now(self, diary):
+        """A brand-new session's _created/_updated should honor context_now."""
+        user_id = "test_user"
+        session_id = "pinned_session"
+        pinned = datetime(2030, 1, 2, 9, 7, tzinfo=UTC)
+
+        await diary.update_memory(
+            user_id,
+            session_id,
+            "I love pizza",
+            "Great choice!",
+            context_now=pinned,
+        )
+
+        convs = await diary.last_conversations(user_id, limit=1)
+        assert session_id in convs
+        # _created is pinned to the override (and not the real wall-clock date).
+        assert convs[session_id]["_created"].startswith("2030-01-02T09:07")
+        # _updated is also driven by the override.
+        assert convs[session_id]["_updated"].startswith("2030-01-02T09:07")
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_existing_not_overwritten_by_context_now(self, diary):
+        """An existing session's _created must not be rewritten by a later context_now."""
+        user_id = "test_user"
+        session_id = "reused_session"
+        first = datetime(2030, 1, 2, 9, 7, tzinfo=UTC)
+        later = datetime(2031, 6, 6, 6, 6, tzinfo=UTC)
+
+        is_new = await diary.ensure_session(user_id, session_id, context_now=first)
+        assert is_new is True
+
+        is_new_again = await diary.ensure_session(user_id, session_id, context_now=later)
+        assert is_new_again is False
+
+        convs = await diary.last_conversations(user_id, limit=1)
+        assert convs[session_id]["_created"].startswith("2030-01-02T09:07")
 
     @pytest.mark.asyncio
     async def test_compaction_runs_and_metadata_persist(self, diary_with_compaction):
@@ -353,6 +397,88 @@ class TestDiary:
         assert "session_4" in session_ids
         assert "session_3" in session_ids
         assert "session_2" in session_ids
+
+    @pytest.mark.asyncio
+    async def test_last_conversations_block_missing_created(self, diary, backend):
+        """last_conversations should not crash on a block lacking _created."""
+        user_id = "missing_created_user"
+
+        import tomli_w
+
+        # Hand-edited/migrated file where one block is missing _created.
+        store = {
+            "_meta": {"version": "0.3", "schema_name": "MyPrefTable"},
+            "conversations": {
+                "session_ok": {
+                    "_created": "2024-01-01T00:00:00Z",
+                    "_updated": "2024-01-01T00:00:00Z",
+                    "_turns": 1,
+                    "summary": "Has created",
+                    "keywords": [],
+                },
+                "session_no_created": {
+                    "_updated": "2024-01-02T00:00:00Z",
+                    "_turns": 2,
+                    "summary": "Missing created",
+                    "keywords": [],
+                },
+            },
+        }
+        await backend.save(user_id, "conversations", tomli_w.dumps(store))
+
+        # Should not raise KeyError.
+        recent = await diary.last_conversations(user_id, limit=5)
+        assert "session_ok" in recent
+        assert "session_no_created" in recent
+
+    @pytest.mark.asyncio
+    async def test_migration_flat_missing_version(self, diary, backend):
+        """Flat files with top-level sessions and a missing/old version are preserved."""
+        user_id = "flat_no_version_user"
+
+        # Flat format with sessions at the TOP LEVEL and no version stamp.
+        flat_format = {
+            "_meta": {"schema_name": "MyPrefTable"},
+            "session_a": {
+                "_created": "2024-01-01T00:00:00Z",
+                "_updated": "2024-01-01T00:00:00Z",
+                "_turns": 4,
+                "summary": "Top-level session a",
+                "keywords": ["a"],
+            },
+            "session_b": {
+                "_created": "2024-01-02T00:00:00Z",
+                "_updated": "2024-01-02T00:00:00Z",
+                "_turns": 2,
+                "summary": "Top-level session b",
+                "keywords": ["b"],
+            },
+        }
+
+        import tomli_w
+
+        await backend.save(user_id, "conversations", tomli_w.dumps(flat_format))
+
+        # Load through diary (should trigger defensive migration, not drop sessions).
+        convs = await diary._load_convs(user_id)
+
+        assert convs["_meta"]["version"] == "0.3"
+        assert "session_a" in convs["conversations"]
+        assert "session_b" in convs["conversations"]
+        assert convs["conversations"]["session_a"]["_turns"] == 4
+        assert convs["conversations"]["session_b"]["summary"] == "Top-level session b"
+
+        # Migrated file saved back with sessions under conversations.
+        raw_data = await backend.load(user_id, "conversations")
+        migrated_data = tomllib.loads(raw_data)
+        assert migrated_data["_meta"]["version"] == "0.3"
+        assert "session_a" in migrated_data["conversations"]
+        assert "session_a" not in migrated_data  # no longer orphaned at top level
+
+        # last_conversations surfaces the preserved sessions.
+        recent = await diary.last_conversations(user_id, limit=5)
+        assert "session_a" in recent
+        assert "session_b" in recent
 
     @pytest.mark.asyncio
     async def test_concurrent_memory_updates(self, diary, mock_agent):

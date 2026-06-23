@@ -355,6 +355,62 @@ class TestLocalBackend:
         # Verify deleted
         assert await backend.exists(user_id, "preferences") is False
 
+    @pytest.mark.asyncio
+    async def test_load_read_error_raises(self, backend, monkeypatch):
+        """Bug 1: a non-FileNotFoundError on an existing file must surface.
+
+        Previously load() caught all exceptions and returned None, which the
+        caller treated as an empty store - silently overwriting good data on
+        the next save. The read error must now propagate instead.
+        """
+        user_id = "test_user"
+        kind = "preferences"
+
+        # Create the file so the exists() precheck passes.
+        await backend.save(user_id, kind, "important data")
+
+        def boom(self, *args, **kwargs):
+            raise OSError("simulated permission/IO error")
+
+        monkeypatch.setattr(Path, "read_text", boom)
+
+        with pytest.raises(OSError):
+            await backend.load(user_id, kind)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_id", ["../evil", "..", "", "   ", "a/b", "a\\b", ".hidden"])
+    async def test_invalid_user_id_raises(self, backend, bad_id):
+        """Bug 2: malicious/empty user_ids must raise ValueError, not escape root."""
+        with pytest.raises(ValueError):
+            await backend.load(bad_id, "preferences")
+        with pytest.raises(ValueError):
+            await backend.save(bad_id, "preferences", "x")
+        with pytest.raises(ValueError):
+            await backend.exists(bad_id, "preferences")
+        with pytest.raises(ValueError):
+            await backend.delete(bad_id, "preferences")
+        with pytest.raises(ValueError):
+            await backend.delete_user(bad_id)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_kind", ["../evil", "..", "", "a/b", ".hidden"])
+    async def test_invalid_kind_raises(self, backend, bad_kind):
+        """Bug 2: malicious/empty kinds must raise ValueError."""
+        with pytest.raises(ValueError):
+            await backend.load("test_user", bad_kind)
+        with pytest.raises(ValueError):
+            await backend.save("test_user", bad_kind, "x")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "good_id",
+        ["alice", "user_1", "user-1", "a.b@example.com", "550e8400-e29b-41d4-a716-446655440000"],
+    )
+    async def test_valid_user_id_still_works(self, backend, good_id):
+        """Bug 2: typical ids (alphanumerics, -, _, UUIDs, emails) still pass."""
+        await backend.save(good_id, "preferences", "ok")
+        assert await backend.load(good_id, "preferences") == "ok"
+
 
 @pytest.mark.skipif(not FIRESTORE_AVAILABLE, reason="Firestore dependencies not installed")
 class TestFirestoreBackend:
@@ -677,6 +733,40 @@ class TestFirestoreBackend:
         # List returns both
         users = await backend.list_users()
         assert set(users) == {"alice", "bob"}
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_id", ["../evil", "..", "", "a/b", "a\\b", ".hidden"])
+    async def test_invalid_user_id_raises(self, backend, bad_id):
+        """Bug 2: malicious/empty user_ids must raise ValueError, not inject path segments."""
+        with pytest.raises(ValueError):
+            await backend.load(bad_id, "preferences")
+        with pytest.raises(ValueError):
+            await backend.save(bad_id, "preferences", "x")
+        with pytest.raises(ValueError):
+            await backend.exists(bad_id, "preferences")
+        with pytest.raises(ValueError):
+            await backend.delete(bad_id, "preferences")
+        with pytest.raises(ValueError):
+            await backend.delete_user(bad_id)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_kind", ["../evil", "..", "", "a/b", ".hidden"])
+    async def test_invalid_kind_raises(self, backend, bad_kind):
+        """Bug 2: malicious/empty kinds must raise ValueError."""
+        with pytest.raises(ValueError):
+            await backend.load("test_user", bad_kind)
+        with pytest.raises(ValueError):
+            await backend.save("test_user", bad_kind, "x")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "good_id",
+        ["alice", "user_1", "user-1", "a.b@example.com", "550e8400-e29b-41d4-a716-446655440000"],
+    )
+    async def test_valid_user_id_still_works(self, backend, good_id):
+        """Bug 2: typical ids (alphanumerics, -, _, UUIDs, emails) still pass."""
+        await backend.save(good_id, "preferences", "ok")
+        assert await backend.load(good_id, "preferences") == "ok"
 
     def test_credentials_dict_initialization(self, monkeypatch):
         """Test FirestoreBackend initialization with credentials_dict."""
