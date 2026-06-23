@@ -23,6 +23,14 @@ from .models import MemoryDeps
 
 REQUIRED_PLACEHOLDERS = {"categories_doc", "current_time"}
 
+#: Default exceptions that trigger a retry on the next fallback model: transient
+#: model/HTTP errors, output validation failures, and request timeouts.
+DEFAULT_FALLBACK_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ModelHTTPError,
+    ValidationError,
+    httpx.TimeoutException,
+)
+
 
 def _round_current_time(now: datetime) -> str:
     """Round a timestamp down to the nearest 15 minutes (to not break prompt caching)."""
@@ -51,7 +59,7 @@ def extractor_prompt_check(prompt: str | Path | Prompt) -> None:
     if isinstance(prompt, Prompt):
         text = prompt.prompt
     else:
-        text = Prompt.from_path(Path(prompt), meta="allow").prompt
+        text = Prompt.from_path(Path(prompt), metadata="allow").prompt
     _warn_missing_placeholders(text, list(REQUIRED_PLACEHOLDERS))
 
 
@@ -101,7 +109,7 @@ def extractor_agent(
     if isinstance(prompt_template, Prompt):
         prompt_obj = prompt_template
     else:
-        prompt_obj = Prompt.from_path(Path(prompt_template), meta="allow")
+        prompt_obj = Prompt.from_path(Path(prompt_template), metadata="allow")
 
     extractor_prompt_check(prompt_obj)
 
@@ -117,7 +125,7 @@ def extractor_agent(
 
     # 3. build model with fallback retries
     if fallback_on is None:
-        fallback_on = (ModelHTTPError, ValidationError, httpx.TimeoutException)
+        fallback_on = DEFAULT_FALLBACK_EXCEPTIONS
 
     # Type narrowing for fallback_on parameter
     fallback_on_param: Callable[[Exception], bool] | tuple[type[Exception], ...]
@@ -127,7 +135,7 @@ def extractor_agent(
         # Convert sequence to tuple - safe because we checked it's not callable or tuple
         fallback_on_param = tuple(fallback_on)
 
-    model_input: ModelInput = model or os.getenv("EXTRACTOR_MODEL", "openai:gpt-5-mini")  # type: ignore[assignment]
+    model_input: ModelInput = model or os.getenv("EXTRACTOR_MODEL", "openai-chat:gpt-5-mini")  # type: ignore[assignment]
 
     fallback_model: ModelInput | FallbackModel
     if fallback_retries > 0:

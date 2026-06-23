@@ -103,7 +103,7 @@ class TestIntegration:
             await writer.submit(user_id, session_id, user_msg, assistant_msg)
 
         # Wait for processing
-        await asyncio.sleep(2)
+        await writer.q.join()
 
         # Verify agent was called
         assert len(agent.run_calls) == 3
@@ -164,7 +164,7 @@ class TestIntegration:
                 tasks.append(task)
 
         await asyncio.gather(*tasks)
-        await asyncio.sleep(2)  # Wait for processing
+        await writer.q.join()  # Wait for processing
 
         # Verify all users have data
         for user_id in users_data:
@@ -208,7 +208,7 @@ class TestIntegration:
         for i in range(5):
             await writer.submit(user_id, f"session_{i}", "I love pizza", "Noted!")
 
-        await asyncio.sleep(2)
+        await writer.q.join()
 
         # Should only have 2 conversations (limit)
         convs = await diary.last_conversations(user_id, limit=10)
@@ -226,7 +226,7 @@ class TestIntegration:
 
         # Store some data with first instance
         await writer1.submit(user_id, "session1", "I love pizza", "Great choice!")
-        await asyncio.sleep(0.2)
+        await writer1.q.join()
         await writer1.close()
 
         # Create new diary instance with same backend
@@ -297,7 +297,7 @@ class TestIntegration:
             tasks.append(task)
 
         await asyncio.gather(*tasks)
-        await asyncio.sleep(2)
+        await writer.q.join()
 
         # Verify data integrity
         convs = await diary.last_conversations(user_id, limit=5)
@@ -425,7 +425,7 @@ class TestIntegration:
         for i in range(10):
             await writer.submit("user", "session", f"Message {i}", f"Response {i}")
 
-        await asyncio.sleep(2)  # Wait for processing
+        await writer.q.join()  # Wait for processing
 
         # System should still be functional despite some failures
         convs = await diary.last_conversations("user", limit=5)

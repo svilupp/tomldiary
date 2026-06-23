@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import threading
 from collections.abc import Coroutine
@@ -18,6 +19,22 @@ WORKERS = max(8, (os.cpu_count() or 1) * 2)
 SHUTDOWN_TIMEOUT = 30
 
 T = TypeVar("T")
+
+
+class _Shutdown:
+    """Marker enqueued during shutdown to wake an idle worker blocked on q.get();
+    it carries no work, so a worker acks it and exits.
+
+    A typed singleton (rather than a bare ``object()``) so the queue's element
+    union narrows cleanly: ``isinstance(item, _Shutdown)`` rules out the sentinel
+    and leaves a precise ``_WorkItem`` tuple for the worker to unpack.
+    """
+
+
+_SHUTDOWN = _Shutdown()
+
+# A queued unit of work, or the shutdown sentinel.
+_WorkItem = tuple[str, str, str, str, datetime | None]
 
 # Global task registry to prevent garbage collection
 background_tasks: set[asyncio.Task[Any]] = set()
@@ -49,9 +66,7 @@ class MemoryWriter:
     def __init__(self, diary: Diary, *, workers: int = WORKERS, qsize: int = QUEUE_MAXSIZE) -> None:
         self.diary = diary
         # Queue item: (user_id, session_id, user_msg, assistant_msg, context_now)
-        self.q: asyncio.Queue[tuple[str, str, str, str, datetime | None]] = asyncio.Queue(
-            maxsize=qsize
-        )
+        self.q: asyncio.Queue[_WorkItem | _Shutdown] = asyncio.Queue(maxsize=qsize)
 
         # Synchronization lock for counters/state. Use threading.Lock so synchronous stats()
         # can take a consistent snapshot without awaiting.
@@ -104,15 +119,17 @@ class MemoryWriter:
 
                 try:
                     # Wait for work with a timeout to allow graceful shutdown
-                    (
-                        user_id,
-                        session_id,
-                        user_msg,
-                        assistant_msg,
-                        context_now,
-                    ) = await asyncio.wait_for(self.q.get(), timeout=1.0)
+                    item = await asyncio.wait_for(self.q.get(), timeout=1.0)
                 except TimeoutError:
                     continue
+
+                if isinstance(item, _Shutdown):
+                    # Shutdown wake-up: no work to do; ack and exit (sentinels are
+                    # only ever enqueued during shutdown).
+                    self.q.task_done()
+                    break
+
+                user_id, session_id, user_msg, assistant_msg, context_now = item
 
                 # Increment active workers counter (thread-safe)
                 with self._state_lock:
@@ -261,6 +278,13 @@ class MemoryWriter:
         # Signal workers to stop after queue is drained (or after timeout)
         with self._state_lock:
             self._shutdown = True
+
+        # Wake any idle workers blocked on q.get() so they observe the shutdown
+        # flag now instead of waiting out the ~1s get() poll timeout. One sentinel
+        # per worker; extras are harmless (a worker exits on the first it sees).
+        for _ in self.workers:
+            with contextlib.suppress(asyncio.QueueFull):
+                self.q.put_nowait(_SHUTDOWN)
 
         if not timed_out:
             # Happy path: queue drained, so just let workers finish their current

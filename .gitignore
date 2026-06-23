@@ -215,7 +215,7 @@ simple_demo_memories/
 test_queue_store/
 
 # uv
-uv.lock
+# uv.lock is committed so CI installs pinned, reproducible deps (uv sync --frozen)
 
 # IDEs
 .idea/

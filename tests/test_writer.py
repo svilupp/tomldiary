@@ -115,7 +115,7 @@ class TestMemoryWriter:
         await writer.submit("user1", "session1", "Hello", "Hi there")
 
         # Wait for processing
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         # Check it was processed (trailing element is context_now, defaults to None)
         assert len(mock_diary.updates) == 1
@@ -137,7 +137,7 @@ class TestMemoryWriter:
             await writer.submit(user_id, session_id, user_msg, assistant_msg)
 
         # Wait for processing
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # Check all were processed
         assert len(mock_diary.updates) == 3
@@ -168,7 +168,7 @@ class TestMemoryWriter:
         await asyncio.gather(*tasks)
 
         # Wait for processing
-        await asyncio.sleep(1)
+        await writer.q.join()
 
         # All should be processed
         assert len(mock_diary.updates) == 10
@@ -187,7 +187,7 @@ class TestMemoryWriter:
         await writer.submit("user1", "session1", "Hello", "Hi")
 
         # Wait for processing (should fail but not crash)
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # No updates should be recorded due to failure
         assert len(mock_diary.updates) == 0
@@ -278,7 +278,7 @@ class TestMemoryWriter:
         assert stats["queue_size"] <= 2
 
         # Wait for processing
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # Check stats after processing
         stats = writer.stats()
@@ -303,7 +303,7 @@ class TestMemoryWriter:
         await writer.submit("user2", "session2", "Test", "Testing")
 
         # Wait for processing
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # Check error tracking
         stats = writer.stats()
@@ -320,19 +320,20 @@ class TestMemoryWriter:
         """Test stats with mixed success and failure."""
         writer = MemoryWriter(mock_diary, workers=1, qsize=5)
 
-        # Submit successful work
+        # Submit successful work (drain it before flipping the flag so the
+        # success/failure attribution is deterministic).
         await writer.submit("user1", "session1", "Success1", "Response1")
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         # Make next ones fail
         mock_diary.should_fail = True
         await writer.submit("user2", "session2", "Fail1", "Response2")
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         # Make next one succeed
         mock_diary.should_fail = False
         await writer.submit("user3", "session3", "Success2", "Response3")
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         stats = writer.stats()
         assert stats["submitted"] == 3
@@ -346,8 +347,8 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_stats_queue_utilization(self, mock_diary):
         """Test queue utilization calculation."""
-        # Slow diary to fill queue
-        mock_diary.update_delay = 0.5
+        # Slow diary so a submitted item is still in flight when we read stats.
+        mock_diary.update_delay = 0.05
 
         writer = MemoryWriter(mock_diary, workers=1, qsize=5)
 
@@ -388,7 +389,7 @@ class TestMemoryWriter:
         assert stats["active_workers"] <= 2
 
         # Wait for completion
-        await asyncio.sleep(0.3)
+        await writer.q.join()
         stats = writer.stats()
         assert stats["active_workers"] == 0
         assert stats["idle_workers"] == 2
@@ -422,7 +423,7 @@ class TestMemoryWriter:
         assert stats["pending"] > 0
 
         # Wait for completion
-        await asyncio.sleep(1.0)
+        await writer.q.join()
         stats = writer.stats()
         assert stats["pending"] == 0
         assert stats["completed"] == 3
@@ -447,7 +448,7 @@ class TestMemoryWriter:
             await asyncio.gather(*tasks)
 
         # Wait for all processing to complete
-        await asyncio.sleep(0.5)
+        await writer.q.join()
 
         # Verify counter invariants
         stats = writer.stats()
@@ -466,8 +467,8 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_stats_consistency_during_processing(self, mock_diary):
         """Test that stats() returns consistent snapshots during active processing."""
-        # Slow processing to keep workers active
-        mock_diary.update_delay = 0.1
+        # Slow processing to keep workers active across several poll iterations
+        mock_diary.update_delay = 0.02
 
         writer = MemoryWriter(mock_diary, workers=4, qsize=50)
 
@@ -491,10 +492,10 @@ class TestMemoryWriter:
             if stats["active_workers"] > stats["total_workers"]:
                 inconsistencies.append(("too_many_active", stats))
 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
 
         # Wait for completion
-        await asyncio.sleep(1)
+        await writer.q.join()
 
         # Should have no inconsistencies
         assert len(inconsistencies) == 0, f"Found inconsistent stats: {inconsistencies}"
@@ -504,7 +505,7 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_concurrent_stats_calls(self, mock_diary):
         """Test that concurrent stats() calls don't cause race conditions."""
-        mock_diary.update_delay = 0.05
+        mock_diary.update_delay = 0.02
 
         writer = MemoryWriter(mock_diary, workers=4, qsize=20)
 
@@ -533,7 +534,7 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_shutdown_with_pending_work(self, mock_diary):
         """Test that shutdown doesn't lose work or corrupt counters."""
-        mock_diary.update_delay = 0.05
+        mock_diary.update_delay = 0.02
 
         writer = MemoryWriter(mock_diary, workers=2, qsize=20)
 
@@ -587,7 +588,7 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_no_work_lost_during_shutdown(self, mock_diary):
         """Test that no work is lost even with immediate shutdown."""
-        mock_diary.update_delay = 0.1  # Slow processing
+        mock_diary.update_delay = 0.02  # Slow processing
 
         writer = MemoryWriter(mock_diary, workers=2, qsize=100)
 

@@ -245,7 +245,7 @@ def compactor_agent(
     if isinstance(prompt_template, Prompt):
         prompt_obj = prompt_template
     else:
-        prompt_obj = Prompt.from_path(Path(prompt_template), meta="allow")
+        prompt_obj = Prompt.from_path(Path(prompt_template), metadata="allow")
 
     system_prompt = prompt_obj.prompt
 
@@ -260,6 +260,6 @@ def compactor_agent(
         Tool(compaction_tools.delete_conversation_block, takes_ctx=True),
     ]
 
-    model_name = model_name or "openai:gpt-5-mini"
+    model_name = model_name or "openai-chat:gpt-5-mini"
 
     return Agent(model_name, deps_type=CompactionDeps, tools=tools, system_prompt=system_prompt)

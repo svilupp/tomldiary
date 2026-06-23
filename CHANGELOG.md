@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Compaction `schedule_at` now runs once per day at the given time instead of a single one-off; a threshold of `0` now disables that trigger
+- Compatibility: require `pydantic-ai>=1.107` and `textprompts>=2.0`, and use the explicit `openai-chat:` model prefix (keeps Chat Completions behavior under pydantic-ai v2.0)
 
 ### Fixed
 - Memory extractor now uses a fresh current time on every request (rounded to 15 minutes) instead of the time captured when the agent was created, fixing stale timestamps in long-running apps
