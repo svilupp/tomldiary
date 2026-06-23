@@ -1,5 +1,5 @@
 .PHONY: help install install-dev lint format format-check typecheck test ci check save \
-	_ck-lint _ck-format _ck-type _ck-test
+	build publish publish-test _ck-lint _ck-format _ck-type _ck-test
 
 # Default target
 .DEFAULT_GOAL := help
@@ -46,6 +46,9 @@ help:
 	@echo "  make test         Run pytest with coverage (verbose)"
 	@echo "  make ci           Full gate: lint + format-check + typecheck + test (quiet, prints OK per leg)"
 	@echo "  make check        Alias for 'make ci'"
+	@echo "  make build        Build sdist + wheel into dist/"
+	@echo "  make publish-test Build and publish to Test PyPI"
+	@echo "  make publish      Build and publish to PyPI"
 	@echo "  make save         Stage all changes and commit with a message"
 
 # Install the package in development mode
@@ -97,6 +100,19 @@ _ck-type:
 
 _ck-test:
 	@$(call run_check,Tests,$(TEST_CMD))
+
+# Build a clean distribution (sdist + wheel) into dist/.
+build:
+	rm -rf dist/
+	uv build
+
+# Publish to Test PyPI first to sanity-check the upload.
+publish-test: build
+	uv publish --publish-url https://test.pypi.org/legacy/
+
+# Publish to PyPI.
+publish: build
+	uv publish
 
 # Git save - add all changes and commit
 save:
