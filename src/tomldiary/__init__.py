@@ -2,6 +2,8 @@
 tomldiary - A TOML-based memory system for tracking user preferences and conversations.
 """
 
+from importlib.metadata import version
+
 from .compaction import CompactionConfig, compactor_agent
 from .diary import Diary, TOMLDiary
 from .extractor_factory import build_extractor, extractor_agent, extractor_prompt_check
@@ -26,7 +28,10 @@ from .schema import (
 )
 from .writer import MemoryWriter, shutdown_all_background_tasks
 
+__version__ = version("tomldiary")
+
 __all__ = [
+    "__version__",
     # Core
     "Diary",
     "TOMLDiary",
