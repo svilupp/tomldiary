@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `context_now` override on `MemoryWriter.submit()` and `Diary.update_memory()` to pin the current time, useful for testing or simulating past/future memories
+- `tomldiary.__version__` exposing the installed package version
 
 ### Changed
 - Compaction `schedule_at` now runs once per day at the given time instead of a single one-off; a threshold of `0` now disables that trigger
