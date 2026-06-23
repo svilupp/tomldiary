@@ -150,7 +150,7 @@ class CompactionDeps:
         if not self.include_conversations:
             return []
         conversations = self.convs.get("conversations")
-        if conversations is None:
+        if not conversations:
             return []
         blocks: list[tuple[str, ConversationItemDict]] = []
         for session_id, data in conversations.items():
@@ -224,7 +224,7 @@ class CompactionDeps:
         if not self.include_conversations:
             raise ValueError("Conversation compaction disabled for this run")
         conversations = self.convs.get("conversations")
-        if conversations is None:
+        if not conversations:
             return
         if session_id in conversations:
             del conversations[session_id]
