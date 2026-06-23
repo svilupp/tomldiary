@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-23
+
+### Added
+- `context_now` override on `MemoryWriter.submit()` and `Diary.update_memory()` to pin the current time, useful for testing or simulating past/future memories
+- `tomldiary.__version__` exposing the installed package version
+
+### Changed
+- Compaction `schedule_at` now runs once per day at the given time instead of a single one-off; a threshold of `0` now disables that trigger
+- Compatibility: require `pydantic-ai>=1.107` and `textprompts>=2.0`, and use the explicit `openai-chat:` model prefix (keeps Chat Completions behavior under pydantic-ai v2.0)
+
+### Fixed
+- Memory extractor now uses a fresh current time on every request (rounded to 15 minutes) instead of the time captured when the agent was created, fixing stale timestamps in long-running apps
+- Local backend no longer treats a read error (e.g. permissions) as an empty store, preventing accidental overwrite of existing memories
+
+### Security
+- Reject `user_id`/`kind` values containing path separators, `..`, or control characters to prevent path traversal in stored files
+
 ## [0.8.0] - 2025-10-30
 
 ### Changed

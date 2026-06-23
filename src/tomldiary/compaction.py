@@ -30,9 +30,16 @@ class CompactionConfig:
     """Configuration controlling when automated compaction should run."""
 
     enabled: bool = False
+    #: Trigger when the serialized store exceeds N characters. None or 0/non-positive = disabled.
     total_char_threshold: int | None = None
+    #: Trigger when any single block exceeds N characters. None or 0/non-positive = disabled.
     segment_char_threshold: int | None = None
+    #: Trigger every N user turns (conversations only). None or 0/non-positive = disabled.
     user_turn_interval: int | None = None
+    #: Recurring daily schedule: fires at most once per calendar day, on the first
+    #: ``should_run`` whose ``now`` is at/after the scheduled time-of-day with no run yet
+    #: today. The date component is ignored; only the time-of-day matters. Naive datetimes
+    #: (or ISO strings without an offset) are coerced to UTC. None = disabled.
     schedule_at: datetime | None = None
     cooldown_seconds: int = 0
     compact_preferences: bool = True
@@ -46,6 +53,9 @@ class CompactionConfig:
             self.schedule_at = None
         else:
             self.schedule_at = cast(datetime, schedule_at)
+        # Coerce naive datetimes to aware UTC so comparisons against an aware ``now`` work.
+        if self.schedule_at is not None and self.schedule_at.tzinfo is None:
+            self.schedule_at = self.schedule_at.replace(tzinfo=UTC)
 
     def should_run(
         self,
@@ -68,28 +78,22 @@ class CompactionConfig:
 
         triggered = False
 
-        if self.total_char_threshold is not None and stats.total_chars >= self.total_char_threshold:
+        # A falsy/non-positive threshold means "disabled" (only None used to disable before).
+        if self.total_char_threshold and stats.total_chars >= self.total_char_threshold:
             triggered = True
 
-        if (
-            self.segment_char_threshold is not None
-            and stats.largest_block >= self.segment_char_threshold
-        ):
+        if self.segment_char_threshold and stats.largest_block >= self.segment_char_threshold:
             triggered = True
 
         if (
             store == "conversations"
-            and self.user_turn_interval is not None
+            and self.user_turn_interval
             and turns_since_compaction is not None
             and turns_since_compaction >= self.user_turn_interval
         ):
             triggered = True
 
-        if (
-            self.schedule_at is not None
-            and now >= self.schedule_at
-            and (last_run is None or last_run < self.schedule_at)
-        ):
+        if self.schedule_at is not None and self._schedule_due(now=now, last_run=last_run):
             triggered = True
 
         if not triggered:
@@ -100,6 +104,27 @@ class CompactionConfig:
             and self.cooldown_seconds
             and now - last_run < timedelta(seconds=self.cooldown_seconds)
         )
+
+    def _schedule_due(self, *, now: datetime, last_run: datetime | None) -> bool:
+        """Return True if the recurring daily schedule is due.
+
+        Fires at most once per calendar day: when ``now`` is at/after the configured
+        time-of-day and no run has happened yet today. All comparisons use the same UTC
+        awareness as ``now`` (``schedule_at`` is coerced to aware UTC in ``__post_init__``).
+        """
+
+        assert self.schedule_at is not None  # gated by caller
+        # Today's occurrence of the scheduled time-of-day, in ``now``'s timezone.
+        today_target = now.replace(
+            hour=self.schedule_at.hour,
+            minute=self.schedule_at.minute,
+            second=self.schedule_at.second,
+            microsecond=self.schedule_at.microsecond,
+        )
+        if now < today_target:
+            return False
+        # Already ran at/after today's target → don't fire again today.
+        return last_run is None or last_run < today_target
 
 
 @dataclass
@@ -125,7 +150,7 @@ class CompactionDeps:
         if not self.include_conversations:
             return []
         conversations = self.convs.get("conversations")
-        if conversations is None:
+        if not conversations:
             return []
         blocks: list[tuple[str, ConversationItemDict]] = []
         for session_id, data in conversations.items():
@@ -199,7 +224,7 @@ class CompactionDeps:
         if not self.include_conversations:
             raise ValueError("Conversation compaction disabled for this run")
         conversations = self.convs.get("conversations")
-        if conversations is None:
+        if not conversations:
             return
         if session_id in conversations:
             del conversations[session_id]
@@ -220,7 +245,7 @@ def compactor_agent(
     if isinstance(prompt_template, Prompt):
         prompt_obj = prompt_template
     else:
-        prompt_obj = Prompt.from_path(Path(prompt_template), meta="allow")
+        prompt_obj = Prompt.from_path(Path(prompt_template), metadata="allow")
 
     system_prompt = prompt_obj.prompt
 
@@ -235,6 +260,6 @@ def compactor_agent(
         Tool(compaction_tools.delete_conversation_block, takes_ctx=True),
     ]
 
-    model_name = model_name or "openai:gpt-5-mini"
+    model_name = model_name or "openai-chat:gpt-5-mini"
 
     return Agent(model_name, deps_type=CompactionDeps, tools=tools, system_prompt=system_prompt)

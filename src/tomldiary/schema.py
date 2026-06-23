@@ -227,11 +227,19 @@ def _format_schema_python(
         json_schema = schema_info["json_schema"]
         properties = json_schema.get("properties", {})
 
+        # Map field names to their serialization names (handle aliases)
+        field_aliases: dict[str, str] = {
+            name: field.serialization_alias or name
+            for name, field in ConversationItem.model_fields.items()
+        }
+
         if not fields:
             lines.append("    pass")
         else:
             for field in fields:
-                field_schema = properties.get(field, {})
+                # Use the serialization alias to look up in properties
+                serialized_name = field_aliases.get(field, field)
+                field_schema = properties.get(serialized_name, {})
                 field_type = field_schema.get("type", "str")
 
                 # Map JSON types to Python types

@@ -22,7 +22,9 @@ class MockDiary:
         self.update_delay = 0
         self.should_fail = False
 
-    async def update_memory(self, user_id, session_id, user_msg, assistant_msg):
+    async def update_memory(
+        self, user_id, session_id, user_msg, assistant_msg, *, context_now=None
+    ):
         """Mock update_memory that records calls."""
         if self.update_delay:
             await asyncio.sleep(self.update_delay)
@@ -30,7 +32,7 @@ class MockDiary:
         if self.should_fail:
             raise RuntimeError("Mock update failure")
 
-        self.updates.append((user_id, session_id, user_msg, assistant_msg))
+        self.updates.append((user_id, session_id, user_msg, assistant_msg, context_now))
 
 
 class TestFireAndForget:
@@ -113,11 +115,11 @@ class TestMemoryWriter:
         await writer.submit("user1", "session1", "Hello", "Hi there")
 
         # Wait for processing
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
-        # Check it was processed
+        # Check it was processed (trailing element is context_now, defaults to None)
         assert len(mock_diary.updates) == 1
-        assert mock_diary.updates[0] == ("user1", "session1", "Hello", "Hi there")
+        assert mock_diary.updates[0] == ("user1", "session1", "Hello", "Hi there", None)
 
         await writer.close()
 
@@ -135,13 +137,14 @@ class TestMemoryWriter:
             await writer.submit(user_id, session_id, user_msg, assistant_msg)
 
         # Wait for processing
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # Check all were processed
         assert len(mock_diary.updates) == 3
 
-        # Convert to sets for comparison (order may vary due to concurrency)
-        expected = set(submissions)
+        # Convert to sets for comparison (order may vary due to concurrency).
+        # The recorded tuple carries a trailing context_now (None when not supplied).
+        expected = {(*submission, None) for submission in submissions}
         actual = set(mock_diary.updates)
         assert actual == expected
 
@@ -165,7 +168,7 @@ class TestMemoryWriter:
         await asyncio.gather(*tasks)
 
         # Wait for processing
-        await asyncio.sleep(1)
+        await writer.q.join()
 
         # All should be processed
         assert len(mock_diary.updates) == 10
@@ -184,7 +187,7 @@ class TestMemoryWriter:
         await writer.submit("user1", "session1", "Hello", "Hi")
 
         # Wait for processing (should fail but not crash)
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # No updates should be recorded due to failure
         assert len(mock_diary.updates) == 0
@@ -275,7 +278,7 @@ class TestMemoryWriter:
         assert stats["queue_size"] <= 2
 
         # Wait for processing
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # Check stats after processing
         stats = writer.stats()
@@ -300,7 +303,7 @@ class TestMemoryWriter:
         await writer.submit("user2", "session2", "Test", "Testing")
 
         # Wait for processing
-        await asyncio.sleep(0.2)
+        await writer.q.join()
 
         # Check error tracking
         stats = writer.stats()
@@ -317,19 +320,20 @@ class TestMemoryWriter:
         """Test stats with mixed success and failure."""
         writer = MemoryWriter(mock_diary, workers=1, qsize=5)
 
-        # Submit successful work
+        # Submit successful work (drain it before flipping the flag so the
+        # success/failure attribution is deterministic).
         await writer.submit("user1", "session1", "Success1", "Response1")
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         # Make next ones fail
         mock_diary.should_fail = True
         await writer.submit("user2", "session2", "Fail1", "Response2")
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         # Make next one succeed
         mock_diary.should_fail = False
         await writer.submit("user3", "session3", "Success2", "Response3")
-        await asyncio.sleep(0.1)
+        await writer.q.join()
 
         stats = writer.stats()
         assert stats["submitted"] == 3
@@ -343,8 +347,8 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_stats_queue_utilization(self, mock_diary):
         """Test queue utilization calculation."""
-        # Slow diary to fill queue
-        mock_diary.update_delay = 0.5
+        # Slow diary so a submitted item is still in flight when we read stats.
+        mock_diary.update_delay = 0.05
 
         writer = MemoryWriter(mock_diary, workers=1, qsize=5)
 
@@ -385,7 +389,7 @@ class TestMemoryWriter:
         assert stats["active_workers"] <= 2
 
         # Wait for completion
-        await asyncio.sleep(0.3)
+        await writer.q.join()
         stats = writer.stats()
         assert stats["active_workers"] == 0
         assert stats["idle_workers"] == 2
@@ -419,7 +423,7 @@ class TestMemoryWriter:
         assert stats["pending"] > 0
 
         # Wait for completion
-        await asyncio.sleep(1.0)
+        await writer.q.join()
         stats = writer.stats()
         assert stats["pending"] == 0
         assert stats["completed"] == 3
@@ -444,7 +448,7 @@ class TestMemoryWriter:
             await asyncio.gather(*tasks)
 
         # Wait for all processing to complete
-        await asyncio.sleep(0.5)
+        await writer.q.join()
 
         # Verify counter invariants
         stats = writer.stats()
@@ -463,8 +467,8 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_stats_consistency_during_processing(self, mock_diary):
         """Test that stats() returns consistent snapshots during active processing."""
-        # Slow processing to keep workers active
-        mock_diary.update_delay = 0.1
+        # Slow processing to keep workers active across several poll iterations
+        mock_diary.update_delay = 0.02
 
         writer = MemoryWriter(mock_diary, workers=4, qsize=50)
 
@@ -488,10 +492,10 @@ class TestMemoryWriter:
             if stats["active_workers"] > stats["total_workers"]:
                 inconsistencies.append(("too_many_active", stats))
 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
 
         # Wait for completion
-        await asyncio.sleep(1)
+        await writer.q.join()
 
         # Should have no inconsistencies
         assert len(inconsistencies) == 0, f"Found inconsistent stats: {inconsistencies}"
@@ -501,7 +505,7 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_concurrent_stats_calls(self, mock_diary):
         """Test that concurrent stats() calls don't cause race conditions."""
-        mock_diary.update_delay = 0.05
+        mock_diary.update_delay = 0.02
 
         writer = MemoryWriter(mock_diary, workers=4, qsize=20)
 
@@ -530,7 +534,7 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_shutdown_with_pending_work(self, mock_diary):
         """Test that shutdown doesn't lose work or corrupt counters."""
-        mock_diary.update_delay = 0.05
+        mock_diary.update_delay = 0.02
 
         writer = MemoryWriter(mock_diary, workers=2, qsize=20)
 
@@ -584,7 +588,7 @@ class TestMemoryWriter:
     @pytest.mark.asyncio
     async def test_no_work_lost_during_shutdown(self, mock_diary):
         """Test that no work is lost even with immediate shutdown."""
-        mock_diary.update_delay = 0.1  # Slow processing
+        mock_diary.update_delay = 0.02  # Slow processing
 
         writer = MemoryWriter(mock_diary, workers=2, qsize=100)
 
@@ -606,6 +610,139 @@ class TestMemoryWriter:
         assert stats["submitted"] == num_tasks
         assert stats["completed"] + stats["failed"] == num_tasks
         assert len(mock_diary.updates) == stats["completed"]
+
+    @pytest.mark.asyncio
+    async def test_close_bounded_by_timeout(self, monkeypatch, mock_diary):
+        """close() must return within ~the timeout, not wait for the full drain.
+
+        Regression for Bug 1: with a 0/short SHUTDOWN_TIMEOUT and slow workers,
+        close() previously blocked until every queued item finished processing.
+        """
+        # Force the timeout to fire immediately so the timed-out path is exercised.
+        monkeypatch.setattr("tomldiary.writer.SHUTDOWN_TIMEOUT", 0)
+
+        # Slow processing so the queue cannot drain instantly.
+        mock_diary.update_delay = 0.5
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=10)
+
+        # Enqueue several slow items (1 worker * 0.5s would be 3s if fully drained).
+        for i in range(6):
+            await writer.submit(f"user_{i}", "sess", f"msg_{i}", f"resp_{i}")
+
+        start = asyncio.get_event_loop().time()
+        await writer.close()
+        elapsed = asyncio.get_event_loop().time() - start
+
+        # Must not wait for the full ~3s drain; cancellation bounds it.
+        assert elapsed < 1.0, f"close() took {elapsed:.2f}s, expected bounded shutdown"
+
+    @pytest.mark.asyncio
+    async def test_cancelled_submit_no_phantom(self, mock_diary):
+        """A cancelled blocked submit() must not leave a phantom submission.
+
+        Regression for Bug 2: the counter must only increment on a successful put().
+        """
+        mock_diary.update_delay = 10  # keep the worker busy so the queue stays full
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=1)
+
+        # First submit fills the queue (will be picked up by the worker shortly).
+        await writer.submit("user-0", "sess", "msg-0", "resp-0")
+        # Second submit fills the now-empty queue slot once the worker dequeues;
+        # keep submitting until a put() blocks on the full queue.
+        await writer.submit("user-1", "sess", "msg-1", "resp-1")
+
+        # This one should block on put() because the queue is full and the worker
+        # is stuck in the 10s update_delay.
+        blocked = asyncio.create_task(writer.submit("user-2", "sess", "msg-2", "resp-2"))
+        await asyncio.sleep(0.05)
+        assert not blocked.done(), "submit() should be blocked on a full queue"
+
+        submitted_before = writer.stats()["submitted"]
+
+        # Cancel the blocked submit before its put() succeeds.
+        blocked.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await blocked
+
+        # The cancelled item never entered the queue, so it must not be counted.
+        assert writer.stats()["submitted"] == submitted_before
+
+        # Invariant must still hold.
+        stats = writer.stats()
+        assert stats["submitted"] == stats["completed"] + stats["failed"] + stats["pending"]
+
+        # Force-close (worker is hung); should be bounded and not hang the test.
+        import tomldiary.writer as writer_mod
+
+        original = writer_mod.SHUTDOWN_TIMEOUT
+        writer_mod.SHUTDOWN_TIMEOUT = 0
+        try:
+            await writer.close()
+        finally:
+            writer_mod.SHUTDOWN_TIMEOUT = original
+
+    @pytest.mark.asyncio
+    async def test_worker_cancelled_midprocess_accounting(self, monkeypatch, mock_diary):
+        """Worker cancelled mid-_process: submitted == completed + failed, no stuck pending.
+
+        Regression for Bug 3: CancelledError during _process must account the
+        in-flight item (as failed) instead of leaving pending stuck > 0.
+        """
+        monkeypatch.setattr("tomldiary.writer.SHUTDOWN_TIMEOUT", 0)
+
+        mock_diary.update_delay = 5  # long enough that close() cancels mid-process
+
+        writer = MemoryWriter(mock_diary, workers=1, qsize=5)
+
+        await writer.submit("user-0", "sess", "msg-0", "resp-0")
+
+        # Let the worker dequeue and enter _process.
+        await asyncio.sleep(0.05)
+        assert writer.stats()["active_workers"] == 1
+
+        # Timeout is 0 -> close() will cancel the worker mid-process.
+        await writer.close()
+
+        stats = writer.stats()
+        assert stats["submitted"] == 1
+        assert stats["completed"] + stats["failed"] == stats["submitted"]
+        assert stats["pending"] == 0
+
+    @pytest.mark.asyncio
+    async def test_cancelled_fire_and_forget_no_loop_handler(self):
+        """Cancelling a fire_and_forget task must not trip the loop exception handler.
+
+        Regression for Bug 4: the done-callback called Task.exception() on a
+        cancelled task, which raises CancelledError and is logged by asyncio as
+        "Exception in callback".
+        """
+        background_tasks.clear()
+
+        caught = []
+        loop = asyncio.get_running_loop()
+        previous_handler = loop.get_exception_handler()
+        loop.set_exception_handler(lambda _loop, context: caught.append(context))
+
+        try:
+
+            async def long_task():
+                await asyncio.sleep(10)
+
+            task = fire_and_forget(long_task(), name="cancel_me")
+            await asyncio.sleep(0.01)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+            # Let the done-callback run.
+            await asyncio.sleep(0.01)
+        finally:
+            loop.set_exception_handler(previous_handler)
+
+        assert caught == [], f"loop exception handler was invoked: {caught}"
+        assert task.cancelled()
 
 
 class TestShutdownBackgroundTasks:

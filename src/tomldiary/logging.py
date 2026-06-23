@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:
+    from types import FrameType
+
     from loguru import Logger
 
 # Remove default handler to reconfigure
@@ -93,11 +95,9 @@ def configure_stdlib_logging_intercept() -> None:
                 level = record.levelno
 
             # Find caller from where originated the logged message
-            frame = sys._getframe(6)
-            depth = 6
+            frame: FrameType | None
+            frame, depth = logging.currentframe(), 2
             while frame and frame.f_code.co_filename == logging.__file__:
-                if frame.f_back is None:
-                    break
                 frame = frame.f_back
                 depth += 1
 

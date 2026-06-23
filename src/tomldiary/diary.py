@@ -82,19 +82,27 @@ class Diary:
         convs_blob = await self._load(user_id, "conversations")
         if convs_blob:
             convs_raw = tomllib.loads(convs_blob)
-            # Check if migration is needed (v0.2 to v0.3)
-            if convs_raw.get("_meta", {}).get("version") == "0.2":
-                # Migrate old format to new format
+            # Check if migration is needed (anything that isn't the current version).
+            # This also defensively handles version-less / corrupted / externally
+            # produced flat files whose sessions live at the top level.
+            if convs_raw.get("_meta", {}).get("version") != _MODEL_VERSION:
+                # Migrate old/flat format to current format
                 migrated: dict[str, Any] = {
                     "_meta": {
                         "version": _MODEL_VERSION,
-                        "schema_name": convs_raw["_meta"]["schema_name"],
+                        "schema_name": convs_raw.get("_meta", {}).get(
+                            "schema_name", self.schema_name
+                        ),
                     },
-                    "conversations": {},
+                    "conversations": dict(convs_raw.get("conversations", {})),
                 }
-                # Move all non-_meta entries to conversations
+                # Move any stray top-level session-shaped entries (dict-valued keys
+                # other than _meta/conversations) into conversations so they are not
+                # silently orphaned.
                 for key, value in convs_raw.items():
-                    if key != "_meta":
+                    if key in ("_meta", "conversations"):
+                        continue
+                    if isinstance(value, dict):
                         migrated["conversations"][key] = value
                 convs = cast(ConversationsStore, migrated)
                 # Save the migrated version
@@ -119,19 +127,38 @@ class Diary:
     async def _save_convs(self, user_id: str, convs: ConversationsStore) -> None:
         await self._save(user_id, "conversations", tomli_w.dumps(convs))
 
-    async def build_deps(self, user_id: str, session_id: str) -> MemoryDeps:
+    async def build_deps(
+        self,
+        user_id: str,
+        session_id: str,
+        *,
+        context_now: datetime | None = None,
+    ) -> MemoryDeps:
         prefs = await self._load_prefs(user_id)
         convs = await self._load_convs(user_id)
 
         # Create a MemoryDeps object with session_id and max_prefs_per_category
         deps = MemoryDeps(
-            prefs, convs, self.allowed, self.schema_name, session_id, self.max_prefs_per_category
+            prefs,
+            convs,
+            self.allowed,
+            self.schema_name,
+            session_id,
+            self.max_prefs_per_category,
+            context_now=context_now,
         )
 
         return deps
 
-    async def ensure_session(self, user_id: str, session_id: str) -> bool:
-        """Create session if needed, return whether it's new"""
+    async def ensure_session(
+        self, user_id: str, session_id: str, *, context_now: datetime | None = None
+    ) -> bool:
+        """Create session if needed, return whether it's new.
+
+        When ``context_now`` is provided, a newly created session pins its
+        ``_created``/``_updated`` to it (used for testing/simulating past or
+        future memories). Existing sessions are never modified.
+        """
         convs = await self._load_convs(user_id)
         conversations: dict[str, Any] = convs["conversations"]
         if session_id not in conversations:
@@ -144,7 +171,12 @@ class Diary:
                 )
                 del conversations[oldest_id]
 
-            conversations[session_id] = ConversationItem().model_dump(by_alias=True)
+            if context_now is not None:
+                now_iso = context_now.isoformat()
+                item = ConversationItem(_created=now_iso, _updated=now_iso)
+            else:
+                item = ConversationItem()
+            conversations[session_id] = item.model_dump(by_alias=True)
             await self._save_convs(user_id, convs)
             return True
         return False
@@ -295,14 +327,22 @@ class Diary:
 
     # ------------ main hook ------------
     async def update_memory(
-        self, user_id: str, session_id: str, user_msg: str, assistant_msg: str
+        self,
+        user_id: str,
+        session_id: str,
+        user_msg: str,
+        assistant_msg: str,
+        *,
+        context_now: datetime | None = None,
     ) -> None:
         # Ensure session exists
-        await self.ensure_session(user_id, session_id)
+        await self.ensure_session(user_id, session_id, context_now=context_now)
 
-        deps = await self.build_deps(user_id, session_id)
+        deps = await self.build_deps(user_id, session_id, context_now=context_now)
         deps.convs["conversations"][session_id]["_turns"] += 1
-        deps.convs["conversations"][session_id]["_updated"] = datetime.now(UTC).isoformat()
+        deps.convs["conversations"][session_id]["_updated"] = (
+            deps.context_now or datetime.now(UTC)
+        ).isoformat()
 
         # Get current preferences and summary for inclusion in the message
         current_preferences = deps.pretty_prefs()
@@ -341,6 +381,10 @@ class Diary:
 
         await self._maybe_run_compactor(deps)
 
+        # Compaction may add/split preference blocks, so re-enforce limits to keep
+        # the "<= max per category at save time" invariant.
+        await self._enforce_preference_limits(deps.prefs)
+
         # TOML already validated by output_validator
         # Backend handles path-level locking for concurrent access
         await self._save_prefs(user_id, deps.prefs)
@@ -365,7 +409,9 @@ class Diary:
         conv_entries = convs.get("conversations", {})
 
         result: dict[str, Any] = dict(
-            sorted(conv_entries.items(), key=lambda kv: kv[1]["_created"], reverse=True)[:limit]
+            sorted(conv_entries.items(), key=lambda kv: kv[1].get("_created", ""), reverse=True)[
+                :limit
+            ]
         )
 
         if not skip_metadata and "_meta" in convs:

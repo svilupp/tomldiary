@@ -4,6 +4,7 @@ import weakref
 from pathlib import Path
 
 from ..logging import get_logger
+from .base import validate_identifier
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,8 @@ class LocalBackend:
 
     def _get_file_path(self, user_id: str, kind: str) -> Path:
         """Get the file path for a user's data kind."""
+        validate_identifier(user_id, "user_id")
+        validate_identifier(kind, "kind")
         user_dir = self.base_path / user_id
         user_dir.mkdir(exist_ok=True)
         return user_dir / f"{kind}.toml"
@@ -39,7 +42,11 @@ class LocalBackend:
         try:
             # Use asyncio.to_thread for file I/O to avoid blocking
             return await asyncio.to_thread(file_path.read_text)
-        except Exception:
+        except FileNotFoundError:
+            # Genuine "not found" (e.g. file removed after the exists() check).
+            # Any other read error (permissions, I/O) must surface, not be
+            # masked as missing - otherwise the caller treats it as an empty
+            # store and overwrites good data on the next save.
             return None
 
     async def save(self, user_id: str, kind: str, content: str) -> None:
@@ -63,12 +70,16 @@ class LocalBackend:
 
     async def exists(self, user_id: str, kind: str) -> bool:
         """Check if a document exists for a user."""
+        validate_identifier(user_id, "user_id")
+        validate_identifier(kind, "kind")
         # Don't use _get_file_path as it creates directories
         file_path = self.base_path / user_id / f"{kind}.toml"
         return await asyncio.to_thread(file_path.exists)
 
     async def delete(self, user_id: str, kind: str) -> None:
         """Delete a specific document for a user."""
+        validate_identifier(user_id, "user_id")
+        validate_identifier(kind, "kind")
         # Don't use _get_file_path as it creates directories
         file_path = self.base_path / user_id / f"{kind}.toml"
 
@@ -82,6 +93,7 @@ class LocalBackend:
 
     async def delete_user(self, user_id: str) -> None:
         """Delete all data for a user."""
+        validate_identifier(user_id, "user_id")
         user_dir = self.base_path / user_id
 
         if await asyncio.to_thread(user_dir.exists):

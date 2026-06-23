@@ -164,25 +164,36 @@ async def upsert_preference(
 
         # Just increment count
         if not suppress_count_increment:
-            cat_tbl[id]["_count"] += 1
-        cat_tbl[id]["_updated"] = datetime.now(UTC).isoformat()
+            cat_tbl[id]["_count"] = cat_tbl[id].get("_count", 0) + 1
+        cat_tbl[id]["_updated"] = (ctx.deps.context_now or datetime.now(UTC)).isoformat()
         cat_tbl[id]["_updated_by"] = ctx.deps.session_id
 
-        return f"✅ Boosted {category}/{id} (count: {cat_tbl[id]['_count']})."
+        return f"✅ Boosted {category}/{id} (count: {cat_tbl[id].get('_count', 0)})."
 
     # Require text for new preferences or updates with text
     if not text:
         return "❌ 'text' parameter is required when creating new preferences or updating existing ones with new text."
 
-    # Check for similar preferences when creating new (id is None or "new")
-    if id is None or id == "new":
+    pref_root = ctx.deps.prefs.setdefault("preferences", {})
+    cat_tbl = pref_root.setdefault(category, {})
+
+    # Whether a brand-new key is about to be created. This is true for the
+    # explicit create paths (id is None or "new") AND for a concrete id that
+    # does not yet exist in the category (e.g. an LLM hallucinating an id).
+    force_create = id == "new"
+    is_new = force_create or id is None or id not in cat_tbl
+
+    # Gate every new-item creation on the per-category limit and dedup checks.
+    # These must run whenever a new key is created, not only on id None/"new",
+    # otherwise an unknown concrete id bypasses the limit and similarity guards.
+    if is_new:
         # Check category limits first
         limit_status = _check_preference_limits(ctx, category)
         if limit_status.startswith("❌"):
             return limit_status
 
         # Check for similar existing preferences (unless forcing with id="new")
-        if id != "new":
+        if not force_create:
             similar_prefs = _find_similar_preferences(ctx, category, text)
             if similar_prefs:
                 # Show top 5 with actual text and similarity scores
@@ -198,21 +209,15 @@ async def upsert_preference(
             # Still allow creation but warn
             pass
 
-    pref_root = ctx.deps.prefs.setdefault("preferences", {})
-    cat_tbl = pref_root.setdefault(category, {})
-
     # Generate ID for new preferences (id is None or "new")
     if id is None or id == "new":
         nums = [int(k[4:]) for k in cat_tbl if k.startswith("pref")]
         id = f"pref{max(nums, default=0) + 1:03d}"
 
-    now = datetime.now(UTC).isoformat()
+    now = (ctx.deps.context_now or datetime.now(UTC)).isoformat()
     session_id = ctx.deps.session_id
     if contexts is None:
         contexts = []
-
-    # Check if this is a new preference or existing one
-    is_new = id not in cat_tbl
 
     if is_new:
         # Creating new preference
@@ -257,7 +262,12 @@ async def forget_preference(
     Use this to remove outdated or incorrect preferences.
     """
     try:
-        del ctx.deps.prefs["preferences"][category][id]
+        cat_tbl = ctx.deps.prefs["preferences"][category]
+        del cat_tbl[id]
+        # Drop the category key entirely once its last preference is removed,
+        # matching delete_preference_block() in compaction.py.
+        if not cat_tbl:
+            ctx.deps.prefs["preferences"].pop(category, None)
         return f"🗑️ Deleted {category}/{id}."
     except KeyError:
         return f"❌ {category}/{id} not found."
@@ -287,5 +297,10 @@ async def update_conversation_summary(
     # Update keywords if provided
     if keywords is not None:
         ctx.deps.convs["conversations"][session_id]["keywords"] = keywords
+
+    # Stamp the update timestamp, consistent with upsert_preference.
+    ctx.deps.convs["conversations"][session_id]["_updated"] = (
+        ctx.deps.context_now or datetime.now(UTC)
+    ).isoformat()
 
     return f"✅ Updated conversation summary for session '{session_id}'."

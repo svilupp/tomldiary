@@ -118,6 +118,11 @@ class MemoryDeps:
     schema_name: str  # name of the preference table class
     session_id: str  # current session_id for tracking created_by/updated_by
     max_prefs_per_category: int = 100  # maximum preferences per category
+    context_now: datetime | None = None
+    """Override for the current time, used for testing/dev (e.g. simulating past/future memories).
+
+    When None, the real current time is used. Should be timezone-aware.
+    """
 
     # pretty-printers for the LLM
     def pretty_prefs(self) -> str:

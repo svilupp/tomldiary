@@ -45,6 +45,7 @@ except ImportError as e:
     ) from e
 
 from ..logging import get_logger
+from .base import validate_identifier
 
 logger = get_logger(__name__)
 
@@ -171,6 +172,8 @@ class FirestoreBackend:
         Returns:
             Firestore document reference
         """
+        validate_identifier(user_id, "user_id")
+        validate_identifier(kind, "kind")
         # Navigate through base_path segments
         path_segments = [s for s in self.base_path.split("/") if s]
 
@@ -273,6 +276,8 @@ class FirestoreBackend:
         Returns:
             True if document exists, False otherwise
         """
+        validate_identifier(user_id, "user_id")
+        validate_identifier(kind, "kind")
         try:
             doc_ref = self._get_document_ref(user_id, kind)
 
@@ -355,6 +360,7 @@ class FirestoreBackend:
         Raises:
             Exception: If Firestore delete fails
         """
+        validate_identifier(user_id, "user_id")
         try:
             # Navigate to the user's collection
             path_segments = [s for s in self.base_path.split("/") if s]
